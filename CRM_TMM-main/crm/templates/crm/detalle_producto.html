@@ -1,0 +1,240 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+<style>
+    :root {
+        --tmm-pink: #d63384; /* 🎨 Color principal: Rosa Vibrante */
+        --tmm-light-pink: #fde2e8; /* Fondo y bordes suaves */
+        --tmm-text-dark: #333;
+        --tmm-text-medium: #666;
+    }
+
+    /* Reset y Tipografía */
+    body {
+        background-color: #fff !important;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* Encabezados y Colores */
+    h1, h2 {
+        color: var(--tmm-pink);
+        font-weight: 700;
+        margin-top: 0;
+    }
+
+    /* Contenedor Principal */
+    .tmm-product-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 50px; /* Mayor espacio entre secciones */
+        margin-top: 30px;
+        max-width: 1000px;
+        margin-left: auto;
+        margin-right: auto;
+        padding: 0 15px;
+        justify-content: center; /* Centrar el contenido de la flexbox principal */
+    }
+
+    /* Imagen del Producto */
+    .tmm-image-section {
+        flex: 1;
+        min-width: 300px;
+        max-width: 450px; /* Límite para la imagen */
+    }
+
+    .tmm-image-wrapper {
+        width: 100%;
+        height: 400px; /* Altura fija para el contenedor */
+        background-color: var(--tmm-light-pink);
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--tmm-light-pink);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+
+    .tmm-product-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Asegura que la imagen cubra el área sin distorsionarse */
+        display: block;
+        transition: transform 0.3s ease-in-out;
+    }
+
+    .tmm-image-placeholder {
+        text-align: center;
+        line-height: 400px;
+        color: var(--tmm-pink);
+        font-weight: bold;
+    }
+
+    /* Sección de Detalles */
+    .tmm-details-section {
+        flex: 2;
+        min-width: 300px;
+        max-width: 500px;
+    }
+
+    .tmm-product-description {
+        font-size: 1.05em;
+        color: var(--tmm-text-dark);
+        line-height: 1.6;
+        margin-bottom: 30px;
+    }
+
+    /* 🌟 MODIFICACIÓN CLAVE PARA ACERCAR LOS ELEMENTOS 🌟 */
+    .tmm-price-row {
+        display: flex; 
+        /* Cambiado de space-between a flex-start para acercar los elementos */
+        justify-content: flex-start; 
+        align-items: center; 
+        margin-top: 20px;
+        margin-bottom: 20px;
+        padding: 10px 0;
+        gap: 20px; /* Agregamos un espacio de 20px entre los dos elementos */
+    }
+    
+    .tmm-price-label {
+        font-size: 1.2em;
+        font-weight: 700;
+        color: var(--tmm-text-dark);
+        margin: 0; /* Eliminamos el margin extra */
+        flex-shrink: 0;
+    }
+
+    .tmm-price {
+        font-size: 30px; /* Precio más grande */
+        display: block;
+    }
+    /* 🌟 FIN MODIFICACIÓN PRECIO 🌟 */
+
+
+    /* Botón */
+    .tmm-btn-add {
+        padding: 15px 30px;
+        background-color: #28a745; /* Verde para 'Añadir' */
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.2em;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: background-color 0.15s ease, transform 0.05s ease;
+        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+    }
+    .tmm-btn-add:hover {
+        background-color: #218838;
+    }
+    .tmm-btn-add:disabled {
+        background-color: #6c757d; /* Gris para deshabilitado */
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    /* Mensaje de Agotado */
+    .tmm-sold-out {
+        color: #dc3545; /* Rojo de Bootstrap para errores */
+        font-weight: bold;
+        padding: 10px;
+        border: 1px solid #f5c6cb;
+        background-color: #f8d7da;
+        border-radius: 5px;
+        margin-top: 20px;
+        display: inline-block;
+    }
+    
+    /* Enlace Volver */
+    .tmm-back-link {
+        color: black;
+        margin-bottom: 25px;
+        display: inline-block;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.15s ease;
+    }
+    .tmm-back-link:hover {
+        color: var(--tmm-pink);
+        text-decoration: underline;
+    }
+
+    /* Separador */
+    hr {
+        border: 0;
+        height: 1px;
+        background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--tmm-light-pink), rgba(0, 0, 0, 0));
+        margin: 30px 0;
+    }
+
+    /* Media Queries para Responsive */
+    @media (max-width: 800px) {
+        .tmm-product-container {
+            flex-direction: column;
+            align-items: center;
+        }
+        .tmm-image-section {
+            max-width: 100%;
+        }
+        .tmm-image-wrapper {
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        .tmm-image-placeholder {
+            line-height: 300px;
+        }
+        .tmm-details-section {
+            max-width: 100%;
+        }
+        .tmm-price-row {
+             /* Centra la fila entera en el móvil */
+            justify-content: center;
+            padding: 10px 0;
+        }
+    }
+</style>
+
+<a href="{% url 'catalogo_productos' %}" class="tmm-back-link">« Volver al Catálogo de Kits</a>
+
+<h1 style="color: var(--tmm-pink); font-size: 2.5em; margin-bottom: 10px;">{{ producto.nombre }}</h1>
+
+<div class="tmm-product-container">
+    
+    <div class="tmm-image-section">
+        <div class="tmm-image-wrapper">
+            {% if producto.imagen %}
+                <img src="{{ producto.imagen.url }}" alt="Imagen del producto {{ producto.nombre }}" 
+                class="tmm-product-img">
+            {% else %}
+                <div class="tmm-image-placeholder">
+                    [Imagen no disponible]
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="tmm-details-section">
+
+        <h2 style="font-size: 1.8em; color: var(--tmm-text-dark); margin-bottom: 20px;">Acerca del Kit</h2>
+        
+        <p class="tmm-product-description">{{ producto.descripcion|linebreaks }}</p>
+        
+        <hr>
+        
+        <div class="tmm-price-row">
+            <p class="tmm-price-label">Precio Único:</p>
+            <span class="tmm-price">${{ producto.precio_venta|intcomma }} CLP</span>
+        </div>
+        
+        {% if producto.esta_disponible %}
+            <button class="tmm-btn-add" disabled>
+                (Pronto) Añadir al Carrito 🛒
+            </button>
+        {% else %}
+            <p class="tmm-sold-out">
+                ¡Producto Agotado! 😞
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock content %}

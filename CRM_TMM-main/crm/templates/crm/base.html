@@ -1,0 +1,216 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ titulo|default:'TMM CRM' }}</title> 
+    <style>
+        /* Estilos Base del Cuerpo y Contenedor */
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #fff, #fff7f5);
+            color: #333;
+        }
+        .container {
+            width: 90%;
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        /* Estilos del Encabezado (Header) - USANDO GRID */
+        header {
+            background: #fff;
+            border-bottom: 1px solid #f3d1d9;
+            padding: 0.8em 2em;
+            display: grid; 
+            grid-template-columns: 1fr auto 1fr; /* Izquierda | Centro Fijo | Derecha */
+            align-items: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            color: #d63384;
+            font-weight: 700;
+        }
+        .header-titulo-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            grid-column: 1; 
+        }
+
+        /* Estilos de Botones de Navegación (Nav Main) */
+        nav.nav-main {
+            display: flex;
+            justify-content: center; /* Centra los botones dentro de la columna central */
+            align-items: center;
+            gap: 15px;
+            grid-column: 2; /* Columna central, mantiene la posición fija */
+        }
+        .nav-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 2px solid #d63384;
+            color: #d63384;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .nav-btn:hover {
+            background: #fdf2f8;
+            color: #a61e4d;
+        }
+        
+        /* Estilos de Autenticación y Botones Generales */
+        .auth-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            grid-column: 3; 
+            justify-content: flex-end; /* Alinea los botones a la derecha de la columna 3 */
+        }
+        .auth-actions span {
+            font-size: 21px; 
+            font-weight: 500;
+        }
+        .btn {
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+        .btn-login {
+            background: #fff;
+            border: 2px solid #d63384;
+            color: #d63384;
+        }
+        .btn-login:hover {
+            background: #fdf2f8;
+        }
+        .btn-register {
+            background: #d63384;
+            color: #fff;
+        }
+        .btn-register:hover {
+            background: #a61e4d;
+        }
+
+        /* --- ESTILOS PARA LA NAVEGACIÓN DE ADMIN - ¡CENTRADOS! --- */
+        .nav-admin {
+            background: #fff;
+            border-top: 1px solid #f3d1d9;
+            border-bottom: 1px solid #f3d1d9;
+            padding: 10px 2em;
+            display: flex;
+            align-items: center;
+            /* PROPIEDAD CLAVE: Centra todos los elementos */
+            justify-content: center; 
+            gap: 20px; 
+        }
+        
+        .admin-title {
+            color: #a61e4d; 
+            font-weight: 700; 
+            font-size: 1.05rem;
+        }
+        
+        .admin-btn {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 2px solid #ff922b; 
+            color: #ff922b;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .admin-btn:hover {
+            background: #fffaf0; 
+            color: #d87d00;
+            border-color: #d87d00;
+        }
+        /* --- FIN DE NUEVOS ESTILOS DE ADMIN --- */
+        
+        /* Otros estilos existentes */
+        footer {
+            background: #fff;
+            border-top: 1px solid #f3d1d9;
+            color: #666;
+            text-align: center;
+            padding: 1em 0;
+            font-size: 0.9rem;
+        }
+        h2 {
+            border-bottom: 2px solid #f3d1d9;
+            padding-bottom: 8px;
+            color: #a61e4d;
+        }
+        .linea-trabajo {
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .b2c {
+            border-left: 6px solid #d63384;
+        }
+        .b2b {
+            border-left: 6px solid #ff922b;
+        }
+
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-titulo-container">
+            <img src="{% static 'logo.jpg' %}" height="70px" class="logo-titulo">
+            <h1>{{ titulo|default:'TMM Bienestar y Conexión' }} </h1>
+        </div>
+        
+        <nav class="nav-main">
+            <a href="{% url 'home' %}" class="nav-btn">Inicio</a>
+            <a href="{% url 'catalogo_talleres' %}" class="nav-btn">Talleres</a>
+            <a href="{% url 'catalogo_productos' %}" class="nav-btn">Kits y Productos</a>
+        </nav>
+        
+        <div class="auth-actions">
+            {% if user.is_authenticated %}
+                <span>Hola, <strong>{{ user.first_name|default:user.username }}</strong> 👋</span>
+                <form method="POST" action="{% url 'logout' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-login">Cerrar Sesión</button>
+                </form>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-login">Iniciar Sesión</a>
+                <a href="{% url 'registro_cliente' %}" class="btn btn-register">Registrarse</a>
+            {% endif %}
+        </div>
+    </header>
+    
+    {% if user.is_superuser %}
+    <nav class="nav-admin">
+        <span class="admin-title">Gestión Rápida:</span>
+        <a href="{% url 'listado_clientes' %}" class="admin-btn">Directorio Clientes</a>
+        <a href="{% url 'gestion_deudores' %}" class="admin-btn">Gestión Deudores</a>
+        <a href="{% url 'panel_reportes' %}" class="admin-btn">Panel Reportes</a>
+    </nav>
+    {% endif %}
+        <div class="container">
+        {% block content %}{% endblock content %}
+    </div>
+
+    <footer>
+        <p>© {{ year|default:'2025' }} TMM Bienestar y Conexión — Valparaíso, Chile</p>
+    </footer>
+</body>
+</html>

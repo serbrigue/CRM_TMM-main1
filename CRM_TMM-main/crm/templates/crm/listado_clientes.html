@@ -1,0 +1,107 @@
+{% extends 'crm/base.html' %}
+{% load humanize crm_tags %}
+
+{% block content %}
+    <h1>Directorio de Clientes y Fidelización</h1>
+    <p>Todos los contactos registrados en el CRM (B2C y B2B) para seguimiento y segmentación.</p>
+
+    {% comment %}
+        Obtenemos el valor del parámetro 'tipo' de la URL para determinar qué filtro está activo.
+    {% endcomment %}
+    {% with request.GET.tipo as tipo_activo %}
+    
+    <div style="margin-bottom: 20px;">
+        <h3 style="color: #000000; border-bottom: 2px solid #e91e63; padding-bottom: 5px; display: inline-block;">Filtros:</h3>
+        <br>
+        
+        {% comment %} 1. Filtro 'Todos' (Activo si no hay parámetro 'tipo') {% endcomment %}
+        {% if not tipo_activo %}
+            {# Estilo activo (ROSA FUERTE con texto blanco) #}
+            <a href="{% url 'listado_clientes' %}" 
+               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+               Todos
+            </a>
+        {% else %}
+            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
+            <a href="{% url 'listado_clientes' %}" 
+               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+               Todos
+            </a>
+        {% endif %}
+
+        {% comment %} 2. Filtro 'Persona Natural (B2C)' {% endcomment %}
+        {% if tipo_activo == 'B2C' %}
+            {# Estilo activo (ROSA FUERTE con texto blanco) #}
+            <a href="{% url 'listado_clientes' %}?tipo=B2C" 
+               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+               Persona Natural (B2C)
+            </a>
+        {% else %}
+            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
+            <a href="{% url 'listado_clientes' %}?tipo=B2C" 
+               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+               Persona Natural (B2C)
+            </a>
+        {% endif %}
+
+        {% comment %} 3. Filtro 'Empresa/Intitución (B2B)' {% endcomment %}
+        {% if tipo_activo == 'B2B' %}
+            {# Estilo activo (ROSA FUERTE con texto blanco) #}
+            <a href="{% url 'listado_clientes' %}?tipo=B2B" 
+               style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+               Empresa/Intitución (B2B)
+            </a>
+        {% else %}
+            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
+            <a href="{% url 'listado_clientes' %}?tipo=B2B" 
+               style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+               Empresa/Intitución (B2B)
+            </a>
+        {% endif %}
+
+    </div>
+
+    {% endwith %}
+    
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        <thead>
+            <tr style="background-color: #e91e63; color: white;">
+                <th style="padding: 10px; text-align: left;">Nombre</th>
+                <th style="padding: 10px; text-align: left;">Contacto</th>
+                <th style="padding: 10px; text-align: left;">Segmento</th>
+                <th style="padding: 10px; text-align: left;">Intereses</th>
+                <th style="padding: 10px; text-align: left;">Registro</th>
+                <th style="padding: 10px;">Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cliente in clientes %}
+                <tr style="border-bottom: 1px solid #ddd; background-color: white;">
+                    <td style="padding: 10px;">{{ cliente.nombre_completo }}</td>
+                    <td style="padding: 10px;">
+                        {{ cliente.email }}<br>
+                        <small style="color: #666;">Tel: {{ cliente.telefono|default:'N/A' }}</small>
+                    </td>
+                    <td style="padding: 10px;">{{ cliente.get_tipo_cliente_display }}</td>
+                    <td style="padding: 10px;">
+                        {% for interes in cliente.intereses_cliente.all %}
+                            <span style="display: inline-block; background-color: #fce4ec; color: #c2185b; border-radius: 4px; padding: 3px 6px; font-size: 0.8em; margin-right: 5px; margin-bottom: 3px;">
+                                {{ interes.nombre }}
+                            </span>
+                        {% empty %}
+                            <small style="color: #999;">Sin intereses registrados</small>
+                        {% endfor %}
+                    </td>
+                    <td style="padding: 10px;">{{ cliente.fecha_registro|date:"d M Y" }}</td>
+                    <td style="padding: 10px; text-align: center;">
+                        <a href="{% url 'detalle_cliente_admin' cliente_id=cliente.id %}" style="color: #e91e63; text-decoration: none; font-weight: bold;">Ver Ficha »</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6" style="padding: 20px; text-align: center; background-color: #fffde7; color: #555;">No hay clientes registrados en el CRM.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock content %}

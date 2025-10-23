@@ -1,0 +1,216 @@
+{% extends 'crm/base.html' %}
+{% load crm_tags humanize %} {% block content %}
+    <h1>Panel de Reportes y Métricas Clave</h1>
+    <p>Información analítica para la toma de decisiones estratégicas, enfocada en crecimiento sostenible.</p>
+
+    <div style="display: flex; justify-content: space-around; gap: 20px; margin: 30px 0;">
+        <div class="card" style="flex: 1; padding: 20px; border-radius: 8px; background-color: #e3f2fd; border-left: 5px solid #2196f3;">
+            <p style="margin: 0; font-size: 1.1em; color: #1565c0;">Ingresos Recaudados (Pagado/Abonado)</p>
+            <h2 style="margin: 5px 0; font-size: 2em; color: #2196f3;">${{ ingresos_totales|intcomma }}</h2>
+        </div>
+        <div class="card" style="flex: 1; padding: 20px; border-radius: 8px; background-color: #e8f5e9; border-left: 5px solid #4caf50;">
+            <p style="margin: 0; font-size: 1.1em; color: #2e7d32;">Total Clientes en CRM</p>
+            <h2 style="margin: 5px 0; font-size: 2em; color: #4caf50;">{{ total_clientes }}</h2>
+        </div>
+        <div class="card" style="flex: 1; padding: 20px; border-radius: 8px; background-color: #fce4ec; border-left: 5px solid #e91e63;">
+            <p style="margin: 0; font-size: 1.1em; color: #ad1457;">Pagos Pendientes/Abonados</p>
+            <h2 style="margin: 5px 0; font-size: 2em; color: #e91e63;">{{ num_deudores }}</h2>
+        </div>
+    </div>
+    
+    <hr>
+    
+    {{ ingresos_labels|json_script:"ingresos-labels-data" }}
+    {{ ingresos_data|json_script:"ingresos-data-data" }}
+    {{ categoria_labels|json_script:"categoria-labels-data" }}
+    {{ categoria_data|json_script:"categoria-data-data" }}
+    {{ modalidad_labels|json_script:"modalidad-labels-data" }}
+    {{ modalidad_data|json_script:"modalidad-data-data" }}
+    
+    <h2 style="margin-top: 40px;">📊 Desglose de Ingresos y Reservas</h2>
+    <div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: space-between;">
+        
+        <div style="flex: 2; min-width: 450px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: white;">
+            <h3 style="color: #444; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px;">Ingresos por Mes (Histórico)</h3>
+            <canvas id="ingresosChart" style="max-height: 300px;"></canvas>
+        </div>
+
+        <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 30px;">
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: white;">
+                <h3 style="color: #444; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px;">Reservas por Categoría</h3>
+                <canvas id="categoriaChart" style="max-height: 300px;"></canvas>
+            </div>
+            
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: white;">
+                <h3 style="color: #444; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px;">Reservas por Modalidad</h3>
+                <canvas id="modalidadChart" style="max-height: 300px;"></canvas>
+            </div>
+        </div>
+        
+    </div>
+    
+    <hr>
+    
+    <h2>⭐ Top 5: Talleres más Inscritos</h2>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f48fb1; color: white;">
+                <th style="padding: 10px; text-align: left;">Taller</th>
+                <th style="padding: 10px; text-align: right;"># Inscripciones</th>
+                <th style="padding: 10px; text-align: right;">Cupos Totales</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for taller in talleres_populares %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{{ taller.nombre }}</td>
+                    <td style="padding: 10px; text-align: right;">{{ taller.num_inscripciones }}</td>
+                    <td style="padding: 10px; text-align: right;">{{ taller.cupos_totales }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3" style="padding: 10px; text-align: center;">No hay inscripciones registradas.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+
+    <h2>💰 Recaudación por Taller (Pagos Recibidos)</h2>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+        <thead>
+            <tr style="background-color: #b39ddb; color: white;">
+                <th style="padding: 10px; text-align: left;">Taller</th>
+                <th style="padding: 10px; text-align: right;">Total Recaudado</th>
+                <th style="padding: 10px; text-align: right;">Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for taller in recaudacion_por_taller %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{{ taller.nombre }}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: bold;">
+                        {% if taller.recaudado %}
+                            ${{ taller.recaudado|intcomma }}
+                        {% else %}
+                            $0
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px; text-align: right;">{{ taller.fecha_taller|date:"d M Y" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3" style="padding: 10px; text-align: center;">No hay datos de recaudación.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <script>
+        // La función parseDjangoData ya no es necesaria.
+        // Accedemos a los datos de forma segura utilizando el ID del script y JSON.parse
+        const ingresosLabels = JSON.parse(document.getElementById('ingresos-labels-data').textContent);
+        const ingresosData = JSON.parse(document.getElementById('ingresos-data-data').textContent);
+        const categoriaLabels = JSON.parse(document.getElementById('categoria-labels-data').textContent);
+        const categoriaData = JSON.parse(document.getElementById('categoria-data-data').textContent);
+        const modalidadLabels = JSON.parse(document.getElementById('modalidad-labels-data').textContent);
+        const modalidadData = JSON.parse(document.getElementById('modalidad-data-data').textContent);
+        
+        // --- Colores y Estilos ---
+        const mainColor = 'rgba(214, 51, 132, 1)'; // Rosa fuerte (tmm-pink)
+        const lightColor = 'rgba(214, 51, 132, 0.4)'; 
+        const chartColors = [
+            '#e91e63', '#ff9800', '#4caf50', '#2196f3', '#9c27b0', '#ffc107'
+        ];
+
+        // --- GRÁFICO 1: INGRESOS POR MES (LÍNEAS) ---
+        new Chart(document.getElementById('ingresosChart'), {
+            type: 'line',
+            data: {
+                labels: ingresosLabels,
+                datasets: [{
+                    label: 'Ingresos (CLP)',
+                    data: ingresosData,
+                    borderColor: mainColor,
+                    backgroundColor: lightColor,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Monto Recaudado ($)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // --- GRÁFICO 2: RESERVAS POR CATEGORÍA (DONA) ---
+        new Chart(document.getElementById('categoriaChart'), {
+            type: 'doughnut',
+            data: {
+                labels: categoriaLabels,
+                datasets: [{
+                    label: 'Reservas',
+                    data: categoriaData,
+                    backgroundColor: chartColors,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    title: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // --- GRÁFICO 3: RESERVAS POR MODALIDAD (BARRAS) ---
+        new Chart(document.getElementById('modalidadChart'), {
+            type: 'bar',
+            data: {
+                // CORRECCIÓN: Se usa modalidadLabels (correcta) en lugar de modalityLabels
+                labels: modalidadLabels, 
+                datasets: [{
+                    label: 'Reservas por Modalidad',
+                    data: modalidadData,
+                    backgroundColor: ['#4caf50', '#2196f3'], // Verde (Presencial) y Azul (Online)
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    </script>
+{% endblock content %}

@@ -1,0 +1,234 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+{% block content %}
+<style>
+  :root {
+    --tmm-pink: #d63384; /* 🎨 nuevo color principal */
+  }
+
+  body {
+    background-color: #fff !important;
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+
+  h1, h2 {
+    color: var(--tmm-pink);
+  }
+
+  .tmm-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    margin-top: 30px;
+    justify-content: center;
+  }
+
+  .tmm-details {
+    flex: 2;
+    min-width: 300px;
+  }
+
+  .tmm-card {
+    flex: 1;
+    min-width: 320px;
+    max-width: 420px;
+    padding: 35px 32px;
+    border-radius: 16px;
+    background: linear-gradient(to bottom right, #fff, #fff8f8);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    border: 1px solid #fde2e8;
+  }
+
+  .tmm-card h2 {
+    text-align: center;
+    color: var(--tmm-pink);
+    font-weight: 800;
+    font-size: 1.3rem;
+    margin-bottom: 18px;
+  }
+
+  .tmm-card p {
+    color: #444;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .tmm-form {
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+    text-align: left;
+  }
+
+  .tmm-field {
+    margin-bottom: 18px;
+  }
+
+  .tmm-field label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+  }
+
+  .tmm-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background-color: #fff;
+    font-size: 15px;
+    transition: all .15s ease;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+  }
+
+  .tmm-input:focus {
+    outline: none;
+    border-color: rgba(214,51,132,0.4);
+    box-shadow: 0 0 0 3px rgba(214,51,132,0.1);
+  }
+
+  .tmm-btn {
+    width: 100%;
+    height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: var(--tmm-pink);
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(214,51,132,0.25);
+    transition: transform .08s ease, filter .1s ease;
+  }
+
+  .tmm-btn:hover { filter: brightness(.97); }
+  .tmm-btn:active { transform: scale(.99); }
+
+  .tmm-msg {
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-size: 14px;
+  }
+
+  .tmm-msg.success { background-color: #e7f8ed; color: #155724; border: 1px solid #c3e6cb; }
+  .tmm-msg.error { background-color: #fde2e8; color: #a61e4d; border: 1px solid #f3c2cd; }
+  .tmm-msg.warning { background-color: #fff8e1; color: #856404; border: 1px solid #ffecb3; }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  li {
+    margin-bottom: 8px;
+  }
+
+  a {
+    color: var(--tmm-pink);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 768px) {
+    .tmm-container {
+      flex-direction: column;
+      align-items: center;
+    }
+  }
+</style>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="tmm-msg {% if message.tags %}{{ message.tags }}{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+{% if taller.imagen %}
+    <img src="{{ taller.imagen.url }}" alt="Imagen del Taller {{ taller.nombre }}" 
+         style="width: 100%; max-height: 350px; object-fit: cover; border-radius: 8px; margin-bottom: 20px;">
+{% endif %}
+<div class="tmm-container">
+  <div class="tmm-details">
+    <h1>{{ taller.nombre }}</h1>
+    
+    {% if taller.categoria %}
+        <h3 style="color: #e91e63; margin-top: -10px; font-weight: 500;">
+            Categoría: <strong>{{ taller.categoria.nombre }}</strong>
+        </h3>
+    {% endif %}
+
+    <p style="font-size: 1.1em;">{{ taller.descripcion|linebreaks }}</p>
+
+    <hr>
+
+    <h2>Detalles del Evento</h2>
+    <ul>
+      <li><strong>Fecha:</strong> {{ taller.fecha_taller|date:"l, d \d\e F \d\e Y" }} a las {{ taller.hora_taller|date:"H:i" }} hrs</li>
+      <li><strong>Modalidad:</strong> {{ taller.get_modalidad_display }}</li>
+      <li><strong>Precio:</strong> <span style="font-size: 1.5em; color: var(--tmm-pink); font-weight: bold;">${{ taller.precio|intcomma }} CLP</span></li>
+      <li>
+        <strong>Cupos Disponibles:</strong>
+        {% if taller.cupos_disponibles > 3 %}
+          <span style="color: green; font-weight: bold;">{{ taller.cupos_disponibles }} de {{ taller.cupos_totales }}</span>
+        {% elif taller.cupos_disponibles > 0 %}
+          <span style="color: orange; font-weight: bold;">¡Solo quedan {{ taller.cupos_disponibles }} cupos!</span>
+        {% else %}
+          <span style="color: red; font-weight: bold;">AGOTADO</span>
+        {% endif %}
+      </li>
+    </ul>
+  </div>
+
+  <div class="tmm-card">
+    <h2>Reserva tu Cupo</h2>
+
+    {% if taller.cupos_disponibles > 0 %}
+      {% if user.is_authenticated %}
+        <p style="color: green; font-weight: bold; text-align:center;">
+            ¡Hola, {{ user.first_name|default:user.username }}! Usaremos tu cuenta para la inscripción.
+        </p>
+        <form method="POST" action="{% url 'detalle_taller' taller_id=taller.id %}" class="tmm-form">
+          {% csrf_token %}
+          <button type="submit" class="tmm-btn">¡Inscribirme con mi Cuenta!</button>
+        </form>
+
+      {% else %}
+        <p style="text-align:center; margin-bottom:20px;">
+          Ingresa tus datos para reservar tu cupo, o 
+          <a href="{% url 'login' %}">inicia sesión</a> si ya tienes una cuenta.
+        </p>
+        <form method="POST" action="{% url 'detalle_taller' taller_id=taller.id %}" class="tmm-form">
+          {% csrf_token %}
+
+          <div class="tmm-field">
+            <label for="nombre">Nombre Completo:</label>
+            <input type="text" id="nombre" name="nombre" class="tmm-input" required>
+          </div>
+
+          <div class="tmm-field">
+            <label for="email">Correo Electrónico:</label>
+            <input type="email" id="email" name="email" class="tmm-input" required>
+          </div>
+
+          <button type="submit" class="tmm-btn">¡Inscribirme y Reservar!</button>
+        </form>
+      {% endif %}
+
+    {% else %}
+      <p style="color: red; font-weight: bold; text-align: center;">
+        No es posible inscribirse, el taller está completo.
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock content %}

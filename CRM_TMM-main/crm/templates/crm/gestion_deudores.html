@@ -1,0 +1,100 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+{% load crm_tags %}
+{% block content %}
+    <h1>Gestión de Inscripciones y Pagos (CRM Administradora)</h1>
+    <p>Lista de todas las clientas con inscripciones en cualquier estado de pago para el seguimiento de ventas.</p>
+
+    {# Obtenemos el valor del parámetro 'estado' de la URL #}
+    {% with request.GET.estado as estado_activo %}
+
+    <div style="margin-bottom: 20px;">
+        <h3 style="color: black; border-bottom: 2px solid #e91e63; padding-bottom: 5px; display: inline-block;">Filtros:</h3>
+        <br>
+
+        {# 1. Filtro 'Todos' (Activo si no hay parámetro 'estado') #}
+        {% if not estado_activo %}
+            <a href="{% url 'gestion_deudores' %}"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+                Todos
+            </a>
+        {% else %}
+            <a href="{% url 'gestion_deudores' %}"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+                Todos
+            </a>
+        {% endif %}
+
+        {# 2. Filtro 'DEUDA' (PENDIENTE o ABONADO) - Lógica de backend debe filtrar por ambos #}
+        {% if estado_activo == 'DEUDA' %}
+            <a href="{% url 'gestion_deudores' %}?estado=DEUDA"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+                Pagos Pendientes
+            </a>
+        {% else %}
+            <a href="{% url 'gestion_deudores' %}?estado=DEUDA"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+                Pagos Pendientes
+            </a>
+        {% endif %}
+
+        {# 3. Filtro 'PAGADO' (anteriormente COMPLETADO) #}
+        {% if estado_activo == 'PAGADO' %}
+            <a href="{% url 'gestion_deudores' %}?estado=PAGADO"
+                style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+                Pagos Completados
+            </a>
+        {% else %}
+            <a href="{% url 'gestion_deudores' %}?estado=PAGADO"
+                style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+                Pagos Completados
+            </a>
+        {% endif %}
+
+    </div>
+
+    {% endwith %}
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        <thead>
+            <tr style="background-color: #e91e63; color: white;">
+                <th style="padding: 10px; text-align: left;">Cliente</th>
+                <th style="padding: 10px; text-align: left;">Taller Inscrito</th>
+                <th style="padding: 10px; text-align: left;">Precio Total</th>
+                <th style="padding: 10px; text-align: left;">Monto Pagado</th>
+                <th style="padding: 10px; text-align: left;">Deuda</th>
+                <th style="padding: 10px; text-align: left;">Estado</th>
+                <th style="padding: 10px; text-align: left;">Fecha Inscripción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inscripcion in deudores %}
+                <tr style="border-bottom: 1px solid #ddd; background-color:
+                    {% if inscripcion.estado_pago == 'PENDIENTE' %}#ffebeb{% elif inscripcion.estado_pago == 'ABONADO' %}#fffde7{% else %}white{% endif %};">
+                    
+                    <td style="padding: 10px;">{{ inscripcion.cliente.nombre_completo }} <br><small>{{ inscripcion.cliente.email }}</small></td>
+                    <td style="padding: 10px;">{{ inscripcion.taller.nombre }}</td>
+                    <td style="padding: 10px;">${{ inscripcion.taller.precio|intcomma }}</td>
+                    <td style="padding: 10px;">${{ inscripcion.monto_pagado|intcomma }}</td>
+                    <td style="padding: 10px; font-weight: bold; color: #cc0000;">
+                        ${{ inscripcion.taller.precio|sub:inscripcion.monto_pagado|intcomma }}
+                    </td>
+                    <td style="padding: 10px;">
+                        <span style="font-weight: bold; color:
+                            {% if inscripcion.estado_pago == 'PENDIENTE' %}red
+                            {% elif inscripcion.estado_pago == 'ABONADO' %}orange
+                            {% elif inscripcion.estado_pago == 'PAGADO' %}green
+                            {% endif %};">
+                            {{ inscripcion.get_estado_pago_display }}
+                        </span>
+                    </td>
+                    <td style="padding: 10px;">{{ inscripcion.fecha_inscripcion|date:"d M Y H:i" }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="7" style="padding: 20px; text-align: center;">No hay inscripciones con el estado de pago seleccionado.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock content %}

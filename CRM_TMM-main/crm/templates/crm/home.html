@@ -1,0 +1,111 @@
+{% extends 'crm/base.html' %}
+
+{% block content %}
+
+{% load static %}
+<section style="display:grid; grid-template-columns:1fr 1fr; gap:30px; align-items:center; margin-bottom:40px;">
+    <div>
+        <h2 style="font-size:2rem; font-weight:800; color:#a61e4d; margin-bottom:15px;">
+            CREA, CONECTA, CUIDA: Talleres que Inspiran
+        </h2>
+        <p style="font-size:1.05rem; line-height:1.6; color:#555; margin-bottom:20px;">
+            Clases prácticas de resina, encuadernación, timbres y más. 
+            Grupos reducidos, ambiente cercano y materiales incluidos. 
+            Perfecto para regalar o disfrutar en equipo.
+        </p>
+        <div style="display:flex; gap:15px; flex-wrap:wrap;">
+            <a href="{% url 'catalogo_talleres' %}" 
+               style="padding:10px 18px; background:#d63384; color:#fff; border-radius:8px; text-decoration:none; font-weight:600;">
+                Ver talleres
+            </a>
+        </div>
+        <p style="margin-top:15px; font-size:0.9rem; color:#666;">
+            ¿Eres empresa? <span style="color:#a61e4d; font-weight:600;">Talleres para equipos y bienestar laboral</span>
+        </p>
+    </div>
+    
+    <div id="carousel-container" style="background:linear-gradient(to bottom right,#f3d9fa,#ffe3ec,#fff5da); border-radius:12px; padding:20px; display:flex; align-items:center; justify-content:center; position: relative; overflow: hidden; height: 350px;">
+        <img class="carousel-img" src="{% static 'imagen1.jpg' %}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width:100%; height:auto; border-radius:8px; opacity: 1; transition: opacity 1s ease-in-out;">
+        <img class="carousel-img" src="{% static 'imagen2.jpg' %}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width:100%; height:auto; border-radius:8px; opacity: 0; transition: opacity 1s ease-in-out;">
+        <img class="carousel-img" src="{% static 'imagen3.jpg' %}" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width:100%; height:auto; border-radius:8px; opacity: 0; transition: opacity 1s ease-in-out;">
+    </div>
+    </section>
+
+<section style="margin-bottom:40px;">
+    <h2>Nuestras Líneas de Trabajo</h2>
+    <div class="linea-trabajo b2c">
+        <h3>🟣 1. B2C – Público general</h3>
+        <ul>
+            <li>Talleres de manualidades presenciales en Valparaíso y alrededores (resina, encuadernación, timbres, etc.).</li>
+            <li>Grupos reducidos en un ambiente cercano, cálido y seguro.</li>
+            <li>Comunidad activa con asesoría post curso, diplomas y conexión emocional.</li>
+            <li>Venta de kits, insumos y productos personalizados.</li>
+        </ul>
+    </div>
+    <div class="linea-trabajo b2b">
+        <h3>🟠 2. B2B – Empresas e instituciones</h3>
+        <ul>
+            <li>Talleres de bienestar y autocuidado para equipos de trabajo.</li>
+            <li>Enfocados en fortalecer el compañerismo, reducir el estrés y mejorar el clima laboral.</li>
+            <li>Propuestas personalizadas, con materiales, coffee break y seguimiento incluido.</li>
+        </ul>
+    </div>
+</section>
+
+<section style="margin-bottom:40px;">
+    <h2>Nuestra Fundadora</h2>
+    <div style="background:#fff; border-radius:12px; padding:20px; box-shadow:0 2px 6px rgba(0,0,0,0.05); display:flex; gap:20px; align-items:center;">
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; background:#fff0f6; border-radius:8px; height:120px; max-width:120px; overflow: hidden;">
+            
+            <img src="{% static 'Dueña.jpg' %}" 
+                 alt="Foto de Carolina López"
+                 style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+            
+        </div>
+        <div style="flex:3;">
+            <p>
+                Soy <strong>Carolina López</strong>, profesora de matemáticas con más de 16 años de experiencia. 
+                En los últimos años he complementado mi labor docente con <em>TMM Bienestar y Conexión</em>, entregando talleres enfocados en conexión, autocuidado y expresión creadora.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section style="text-align:center; background:linear-gradient(to right,#fff0f6,#fff5da); padding:25px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+    <h3 style="margin-bottom:10px; color:#a61e4d;">¿Quieres organizar un taller para tu equipo?</h3>
+    <p style="color:#555;">Escríbenos a <strong>tmmbienestaryconexion@gmail.com</strong> y armamos una propuesta a medida.</p>
+    <a href="mailto:tmmbienestaryconexion@gmail.com" 
+       style="margin-top:15px; display:inline-block; padding:10px 18px; background:#d63384; color:#fff; border-radius:8px; text-decoration:none; font-weight:600;">
+        Contactar
+    </a>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const images = document.querySelectorAll('#carousel-container .carousel-img');
+        let currentIndex = 0;
+        const totalImages = images.length;
+        const intervalTime = 4000; // Cambia cada 4 segundos (4000ms)
+
+        function showNextImage() {
+            // Oculta la imagen actual
+            images[currentIndex].style.opacity = 0;
+
+            // Calcula el siguiente índice
+            currentIndex = (currentIndex + 1) % totalImages;
+
+            // Muestra la siguiente imagen
+            images[currentIndex].style.opacity = 1;
+        }
+
+        // Asegura que solo la primera imagen sea visible al inicio (aunque ya está en el HTML)
+        images.forEach((img, index) => {
+            img.style.opacity = index === 0 ? 1 : 0;
+        });
+
+        // Inicia el carrusel automático
+        setInterval(showNextImage, intervalTime);
+    });
+</script>
+
+{% endblock content %}

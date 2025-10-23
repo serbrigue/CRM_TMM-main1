@@ -1,0 +1,104 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+    <h1 style="color: #444;">Ficha de Cliente: {{ cliente.nombre_completo }}</h1>
+    <a href="{% url 'listado_clientes' %}" style="color: black; margin-bottom: 20px; display: block; text-decoration: none; font-weight: bold;">« Volver al Directorio</a>
+
+    <div style="display: flex; gap: 40px; margin-top: 30px;">
+
+        <div style="flex: 1; min-width: 300px;">
+            
+            <div style="padding: 20px; border-radius: 8px; background-color: #e3f2fd; border-left: 5px solid #2196f3; margin-bottom: 30px;">
+                <h2 style="margin-top: 0; font-size: 1.2em; color: #1565c0;">Detalles de Contacto y Segmentación</h2>
+                <ul style="list-style: none; padding: 0; font-size: 0.95em;">
+                    <li style="margin-bottom: 8px;"><strong>Email:</strong> {{ cliente.email }}</li>
+                    <li style="margin-bottom: 8px;"><strong>Teléfono:</strong> {{ cliente.telefono|default:'N/A' }}</li>
+                    <li style="margin-bottom: 8px;"><strong>Comuna:</strong> {{ cliente.comuna_vive|default:'N/A' }}</li>
+                    <li style="margin-bottom: 8px;"><strong>Segmento:</strong> <span style="font-weight: bold; color: #1565c0;">{{ cliente.get_tipo_cliente_display }}</span></li>
+                    <li style="margin-bottom: 8px;"><strong>Cliente desde:</strong> {{ cliente.fecha_registro|date:"d M Y" }}</li>
+                </ul>
+            </div>
+            
+            <div style="padding: 20px; border-radius: 8px; background-color: #ede7f6; border-left: 5px solid #673ab7; margin-bottom: 30px;">
+                <h2 style="margin-top: 0; font-size: 1.2em; color: #4527a0;">Intereses de Segmentación</h2>
+                <p style="color: #666; font-size: 0.9em; margin-top: -10px;">Usado para marketing personalizado y promociones.</p>
+                <div style="margin-top: 15px;">
+                    {% for interes in cliente.intereses_cliente.all %}
+                        <span style="display: inline-block; background-color: #d1c4e9; color: #4527a0; border-radius: 4px; padding: 5px 10px; font-size: 0.85em; margin-right: 8px; margin-bottom: 8px; font-weight: bold;">
+                            {{ interes.nombre }}
+                        </span>
+                    {% empty %}
+                        <p style="color: #777;">El cliente aún no tiene intereses asignados.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="padding: 20px; border-radius: 8px; background-color: #fce4ec; border-left: 5px solid #e91e63; margin-bottom: 30px;">
+                <h2 style="margin-top: 0; font-size: 1.2em; color: #ad1457;">Notas de Fidelización</h2>
+                <p style="white-space: pre-wrap; margin: 0; font-size: 0.95em;">
+                    {{ cliente.observaciones|default:'(Sin notas de seguimiento personalizadas)' }}
+                </p>
+            </div>
+            
+        </div>
+
+        <div style="flex: 2; min-width: 500px;">
+
+            <h2 style="color: #444; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">Historial de Talleres ({{ total_talleres_realizados }} Inscripciones)</h2>
+            
+            {% if historial_inscripciones %}
+                {% for inscripcion in historial_inscripciones %}
+                    <div style="border: 1px solid #c8e6c9; padding: 15px; margin-bottom: 15px; border-radius: 4px; background-color: #f1f8e9;">
+                        <h4 style="color: #388e3c; margin-top: 0; margin-bottom: 8px;">
+                            Taller: {{ inscripcion.taller.nombre }}
+                        </h4>
+                        <p style="margin: 0; font-size: 0.9em; line-height: 1.5; color: #555;">
+                            <strong>Fecha:</strong> {{ inscripcion.taller.fecha_taller|date:"d M Y" }} | 
+                            <strong>Modalidad:</strong> {{ inscripcion.taller.get_modalidad_display }} | 
+                            <strong>Categoría:</strong> {{ inscripcion.taller.categoria.nombre|default:'N/A' }}
+                        </p>
+                        <p style="margin: 5px 0 0; font-size: 0.9em;">
+                            <strong>Estado Pago:</strong> 
+                            <span style="font-weight: bold; padding: 3px 6px; border-radius: 4px; color: white; 
+                                {% if inscripcion.estado_pago == 'PAGADO' %}background-color: #4caf50;
+                                {% elif inscripcion.estado_pago == 'PENDIENTE' %}background-color: #e53935;
+                                {% else %}background-color: #ff9800;
+                                {% endif %};">
+                                {{ inscripcion.get_estado_pago_display }} 
+                            </span> 
+                            (Pagado: ${{ inscripcion.monto_pagado|intcomma }})
+                        </p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #777;">Este cliente no tiene inscripciones a talleres registradas.</p>
+            {% endif %}
+
+            <h2 style="margin-top: 40px; color: #444; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;">Historial de Kits y Productos</h2>
+            <p style="color: #666; font-size: 0.9em;">Visualiza los productos comprados para ofrecer promociones de insumos.</p>
+
+            {% if cliente.compras_kits.all %}
+                {% for venta in cliente.compras_kits.all %}
+                    <div style="border: 1px solid #ffccbc; padding: 15px; margin-bottom: 15px; border-radius: 4px; background-color: #fbe9e7;">
+                        <h4 style="color: #e64a19; margin-top: 0; margin-bottom: 5px;">
+                            Compra #{{ venta.id }} - {{ venta.fecha_venta|date:"d M Y" }}
+                        </h4>
+                        <p style="margin: 0 0 5px; font-size: 0.9em;">
+                            <strong>Monto Total:</strong> ${{ venta.monto_total|intcomma }} | 
+                            <strong>Estado Pago:</strong> <span style="font-weight: bold; color: white; background-color: #4caf50; padding: 3px 6px; border-radius: 4px;">{{ venta.get_estado_pago_display }}</span>
+                        </p>
+                        <ul style="margin-top: 10px; margin-left: 15px; list-style-type: square; font-size: 0.9em;">
+                            {% for detalle in venta.detalles.all %}
+                                <li style="margin-bottom: 3px;">{{ detalle.cantidad }}x <strong>{{ detalle.producto.nombre }}</strong> (${{ detalle.precio_unitario|intcomma }} c/u)</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #777;">Este cliente no ha comprado kits o productos registrados.</p>
+            {% endif %}
+
+        </div>
+    </div>
+{% endblock content %}

@@ -1,0 +1,163 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+    
+    <style>
+        /* Definiciones de color basadas en la paleta del catálogo de talleres */
+        :root {
+            /* Usando los colores primarios del ejemplo de los talleres: */
+            --tmm-pink-accent: #e91e63;  /* Color del botón/acento fuerte */
+            --tmm-light-border: #f3e5f5; /* Color de fondo o borde suave */
+            --tmm-text-color: #444;
+            --tmm-body-text: #666;
+        }
+
+        /* Estilo general del encabezado */
+        h1 {
+            font-size: 31px;
+        }
+
+        p {
+            color: black;
+            font-size: 1.05rem;
+            margin-bottom: 30px;
+        }
+
+        /* Estilo de la tarjeta del producto (Taller-Card Style) */
+        .product-card {
+            border: 1px solid #ccc; /* Borde más clásico */
+            padding: 18px;
+            width: 300px;
+            border-radius: 8px; /* Bordes más sutiles */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background-color: white;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+        }
+
+        /* Imagen del producto */
+        .product-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            margin-bottom: 12px;
+            border-radius: 6px;
+        }
+
+        /* Espacio para la imagen cuando no existe */
+        .product-card .no-image {
+            width: 100%; 
+            height: 180px; 
+            background-color: var(--tmm-light-border); /* Color de fondo #f3e5f5 */
+            text-align: center; 
+            line-height: 180px; 
+            margin-bottom: 12px; 
+            border-radius: 6px; 
+            color: var(--tmm-magenta-dark);
+            font-weight: 600;
+        }
+
+        /* Estilo del título del producto */
+        .product-card h3 {
+            color: var(--tmm-magenta-dark); /* Color #9c27b0 */
+            font-size: 1.3rem;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 2px solid var(--tmm-pink-accent); /* Borde de acento #e91e63 */
+            padding-bottom: 5px;
+        }
+
+        /* Estilo de la descripción */
+        .product-card p.description {
+            font-size: 0.95em;
+            color: var(--tmm-text-color);
+            margin-bottom: auto; /* Empuja el precio y el botón hacia abajo */
+            line-height: 1.4;
+        }
+
+        /* Estilo del precio */
+        .product-card p.price {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            color: var(--tmm-text-color);
+        }
+
+        .product-card p.price strong {
+            font-size: 15px;
+            font-weight: 700px;
+        }
+        
+        .product-card p.price span {
+            font-size: 16px;
+            color: black;
+        }
+
+        /* Estilo del botón */
+        .product-card a.tmm-btn {
+            display: block;
+            text-align: center;
+            background-color: var(--tmm-pink-accent); /* Fondo #e91e63 */
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 4px; /* Bordes más cuadrados */
+            font-weight: 500;
+            margin-top: 10px;
+            transition: background-color 0.15s ease;
+        }
+
+        .product-card a.tmm-btn:hover {
+            background-color: #d81b60; /* Un poco más oscuro al pasar el ratón */
+        }
+
+    </style>
+
+    <h1 style="color: #000000;">Kits, Insumos y Productos TMM</h1>
+    <p>
+        ¡Complementa tu aprendizaje con los kits, insumos y productos personalizados de TMM!
+    </p>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: flex-start;">
+        
+        {% for producto in productos %}
+        <div class="product-card">
+            {% if producto.imagen %}
+                <img src="{{ producto.imagen.url }}" alt="Imagen del producto {{ producto.nombre }}">
+            {% else %}
+                <div class="no-image">
+                    Sin imagen disponible
+                </div>
+            {% endif %}
+            
+            <h3 style="color: #9c27b0;">{{ producto.nombre }}</h3>
+            
+            <p class="description">
+                {{ producto.descripcion|truncatechars:80|default:"Kit esencial para manualidades creativas." }}
+            </p>
+            
+            <p class="price">
+                <strong>Precio:</strong> 
+                <span>${{ producto.precio_venta|intcomma }} CLP</span>
+            </p>
+            
+            <a href="{% url 'detalle_producto' producto_id=producto.id %}" class="tmm-btn">
+                Ver Detalles
+            </a>
+            
+        </div>
+        {% empty %}
+        <p style="font-size:1.1rem; color:var(--tmm-magenta-dark); font-weight:600; margin-top:20px;">
+            En este momento, no tenemos kits disponibles para la venta. ¡Vuelve pronto!
+        </p>
+        {% endfor %}
+        
+    </div>
+
+{% endblock content %}

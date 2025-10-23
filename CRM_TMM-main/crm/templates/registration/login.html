@@ -1,0 +1,175 @@
+{% extends 'crm/base.html' %}
+
+{% block content %}
+<style>
+  :root {
+    --tmm-pink: #9c27b0;
+    --tmm-magenta: #b11b60;
+  }
+
+  body {
+    background-color: #fff !important;
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+
+  .tmm-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 8vh; /* sube el bloque */
+    color: #1f2937;
+  }
+
+  /* 🔸 Contenedor principal tipo "tarjeta" */
+  .tmm-card {
+    width: 100%;
+    max-width: 460px;
+    padding: 45px 40px; /* más espacio interior horizontal */
+    margin: 0 auto 40px auto;
+    border-radius: 16px;
+    background: linear-gradient(to bottom right, #fff, #fff8f8);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    border: 1px solid #fde2e8;
+    text-align: center;
+  }
+
+  .tmm-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    background: linear-gradient(135deg,#f9a8d4,#fcd34d);
+    box-shadow: 0 6px 16px rgba(156,39,176,0.12);
+    margin: 0 auto 16px;
+  }
+
+  .tmm-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #d63384;
+    margin-bottom: 6px;
+  }
+
+  .tmm-divider {
+    width: 100px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(177,27,96,0.3), rgba(255,193,7,0.1));
+    margin: 12px auto;
+    border-radius: 2px;
+  }
+
+  .tmm-sub {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 25px;
+  }
+
+  /* 🔸 FORMULARIO centrado y con aire lateral */
+  .tmm-form {
+    width: 100%;
+    max-width: 340px; /* evita que los campos toquen el borde */
+    margin: 0 auto; /* centra el formulario dentro de la tarjeta */
+    text-align: left;
+  }
+
+  .tmm-field {
+    margin-bottom: 18px;
+  }
+
+  .tmm-field label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+  }
+
+  .tmm-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 15px;
+    transition: all .15s ease;
+  }
+
+  .tmm-input:focus {
+    outline: none;
+    border-color: rgba(156,39,176,0.4);
+    box-shadow: 0 0 0 3px rgba(156,39,176,0.1);
+  }
+
+  .tmm-btn {
+    width: 100%;
+    height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: #d63384;
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(156,39,176,0.25);
+    transition: transform .08s ease, filter .1s ease;
+  }
+
+  .tmm-btn:hover { filter: brightness(.97); }
+  .tmm-btn:active { transform: scale(.99); }
+
+  .tmm-error {
+    background: #fff0f6;
+    border: 1px solid rgba(209,85,137,0.12);
+    color: #b91c59;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+
+  .tmm-link {
+    display: block;
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+    color: #5b21b6;
+    text-decoration: underline;
+  }
+</style>
+
+<div class="tmm-page">
+  <div class="tmm-card">
+  
+    <h2 class="tmm-title">Accesa a su Cuenta TMM</h2>
+    <div class="tmm-divider"></div>
+
+    {% if form.errors %}
+      <div class="tmm-error">
+        Tu nombre de usuario o contraseña no coinciden. Intenta de nuevo.
+      </div>
+    {% endif %}
+
+    <form method="post" class="tmm-form">
+      {% csrf_token %}
+      <div class="tmm-field">
+        <label for="{{ form.username.id_for_label }}">Usuario</label>
+        <input type="text" name="{{ form.username.name }}" id="{{ form.username.id_for_label }}" class="tmm-input" required>
+      </div>
+
+      <div class="tmm-field">
+        <label for="{{ form.password.id_for_label }}">Contraseña</label>
+        <input type="password" name="{{ form.password.name }}" id="{{ form.password.id_for_label }}" class="tmm-input" required>
+      </div>
+
+      <button type="submit" class="tmm-btn">Iniciar Sesión</button>
+    </form>
+
+    <a href="{% url 'admin:index' %}" class="tmm-link">Ir al Panel Avanzado (Admin)</a>
+  </div>
+</div>
+{% endblock content %}
