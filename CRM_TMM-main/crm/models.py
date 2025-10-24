@@ -1,6 +1,8 @@
 from django.db import models
 from django.db.models import F # Necesario para la actualización atómica
 from django.contrib.auth.models import User 
+from django.utils import timezone
+from datetime import date
 
 # --- MODELO 1: Interes ---
 # Nuevo modelo para categorizar los temas que le interesan a un cliente para segmentación.
@@ -93,6 +95,15 @@ class Taller(models.Model):
             self.cupos_disponibles = self.cupos_totales
         super().save(*args, **kwargs)
 
+    def cumpleanios_hoy(self):
+        """Devuelve True si el cumpleaños del cliente es hoy."""
+        if self.fecha_nacimiento:
+            # Compara solo mes y día con la fecha actual en la zona horaria del proyecto
+            today = timezone.localdate()
+            return (self.fecha_nacimiento.day == today.day and 
+                    self.fecha_nacimiento.month == today.month)
+        return False    
+
     def __str__(self):
         return f"{self.nombre} ({self.fecha_taller})"
 
@@ -136,6 +147,7 @@ class Producto(models.Model):
     precio_venta = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio de Venta (CLP)")
     esta_disponible = models.BooleanField(default=True, verbose_name="¿Está disponible para la venta?")
     imagen = models.ImageField(upload_to='productos/', blank=True, null=True, verbose_name="Imagen del Producto")
+    stock_actual = models.IntegerField(default=0, verbose_name="Stock Actual en Bodega")
     class Meta:
         verbose_name_plural = "Productos (Kits)"
         

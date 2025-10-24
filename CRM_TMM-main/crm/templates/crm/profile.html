@@ -1,0 +1,279 @@
+// crm/templates/crm/profile.html
+
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<style>
+    /* Estilos de perfil */
+    .profile-container {
+        display: flex;
+        gap: 30px;
+        flex-wrap: wrap;
+    }
+    .profile-sidebar {
+        flex: 1;
+        min-width: 250px;
+        padding: 20px;
+        border-radius: 12px;
+        background-color: #fdf2f8; /* Fondo suave */
+        border: 1px solid #f3d1d9;
+    }
+    .profile-main {
+        flex: 3;
+        min-width: 600px;
+    }
+    .profile-card {
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        background-color: white;
+        border: 1px solid #eee;
+    }
+    .sidebar-info strong {
+        color: #d63384;
+    }
+    .sidebar-info {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #f3d1d9;
+    }
+    .section-title {
+        color: #a61e4d;
+        border-bottom: 2px solid #f3d1d9;
+        padding-bottom: 5px;
+        margin-top: 30px;
+    }
+    .item-box {
+        border-left: 4px solid #ff922b;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #fffaf0;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .item-box.paid {
+        border-left-color: #4caf50;
+        background-color: #f1f8e9;
+    }
+    .item-box.pending {
+        border-left-color: #e53935;
+        background-color: #ffebeb;
+    }
+    .item-box h4 {
+        margin-top: 0;
+        margin-bottom: 5px;
+        font-size: 1.1em;
+        color: #333;
+    }
+    /* Estilo específico para Recomendaciones */
+    .recommended-box {
+        border-left: 4px solid #9c27b0 !important; /* Cambiamos a púrpura para destacar */
+        background-color: #f3e5f5 !important;
+    }
+.calendar-widget {
+        margin-bottom: 30px;
+        background: #fff;
+        border: 1px solid #d1c4e9;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    .calendar-widget table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85em;
+    }
+    .calendar-widget th {
+        text-align: center;
+        color: #4527a0; /* Púrpura de acento */
+        padding: 5px 0;
+    }
+    .calendar-widget td {
+        text-align: center;
+        padding: 4px;
+        height: 25px;
+        vertical-align: middle;
+        border: 1px solid #eee;
+    }
+    .calendar-day-course {
+        background-color: #ff922b; /* Naranja/Amarillo para curso */
+        color: white;
+        font-weight: bold;
+        border-radius: 50%; /* Resaltar el día */
+        cursor: help;
+        border: 1px solid #e65100;
+    }
+    .calendar-day-course:hover {
+        background-color: #e65100;
+    }
+    .calendar-day-inactive {
+        color: #ccc; /* Días del mes anterior/siguiente */
+    }
+    .calendar-header {
+        text-align: center;
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #d63384;
+        margin-bottom: 10px;
+    }
+    /* ... (Fin de nuevos estilos) ... */
+</style>
+
+<h1>Mi Perfil de Usuario TMM</h1>
+
+{% if messages %}
+  {% for message in messages %}
+    <div style="padding: 10px; background-color: #fde2e8; color: #a61e4d; border: 1px solid #f3c2cd; border-radius: 4px; margin-bottom: 15px;">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="profile-container">
+    
+    {# Columna Izquierda: Información Personal #}
+    <div class="profile-sidebar">
+        <h2>👋 Hola, {{ user_django.first_name|default:user_django.username }}</h2>
+        
+        {% if cliente %}
+            
+            {# --- WIDGET DE CALENDARIO --- #}
+            <div class="calendar-widget">
+                <div class="calendar-header">
+                    {{ mes_actual_nombre }} {{ anio_actual }}
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Lu</th><th>Ma</th><th>Mi</th><th>Ju</th><th>Vi</th><th>Sá</th><th>Do</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for week in mes_calendario %}
+                            <tr>
+                            {% for day in week %}
+                                {% if day.month == current_month %}
+                                    <td 
+                                        {% if day in fechas_cursos_activas %}
+                                            class="calendar-day-course" title="¡Tienes un curso este día!"
+                                        {% endif %}
+                                    >
+                                        {{ day.day }}
+                                    </td>
+                                {% else %}
+                                    <td class="calendar-day-inactive">{{ day.day }}</td>
+                                {% endif %}
+                            {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <small style="display:block; text-align:center; margin-top:10px; font-size: 0.8em; color: #555;">
+                    <span style="display:inline-block; width:10px; height:10px; background-color:#ff922b; border-radius:50%; margin-right:5px;"></span>
+                    Día con curso agendado.
+                </small>
+            </div>
+            {# --- FIN DE WIDGET DE CALENDARIO --- #}
+            
+            <p class="sidebar-info">
+                <strong>Correo:</strong> {{ user_django.email }}<br>
+                <strong>Usuario:</strong> {{ user_django.username }}
+            </p>
+            
+            <h3>Detalles de Contacto (CRM)</h3>
+            <div class="profile-card sidebar-info">
+                <p><strong>Nombre Completo:</strong> {{ cliente.nombre_completo }}</p>
+                <p><strong>Teléfono:</strong> {{ cliente.telefono|default:'N/A' }}</p>
+                <p><strong>Comuna:</strong> {{ cliente.comuna_vive|default:'N/A' }}</p>
+                <p><strong>Tipo:</strong> {{ cliente.get_tipo_cliente_display }}</p>
+                {% if cliente.fecha_nacimiento %}
+                    <p><strong>Cumpleaños:</strong> {{ cliente.fecha_nacimiento|date:"d \d\e F" }}</p>
+                {% endif %}
+            </div>
+
+            <h3>Intereses Asignados</h3>
+            <div class="profile-card">
+                {% for interes in cliente.intereses_cliente.all %}
+                    <span style="display: inline-block; background-color: #d1c4e9; color: #4527a0; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; margin-right: 5px; margin-bottom: 5px;">
+                        {{ interes.nombre }}
+                    </span>
+                {% empty %}
+                    <p style="font-size: 0.9em; color: #666;">Aún no tienes intereses asignados.</p>
+                {% endfor %}
+            </div>
+            
+        {% else %}
+            <p>Asegura tu primer cupo para completar tu perfil de cliente y acceder a más beneficios.</p>
+        {% endif %}
+    </div>
+
+    {# Columna Derecha: Historial y Trazabilidad #}
+    <div class="profile-main">
+        
+        {# --- SECCIÓN: RECOMENDACIONES DE TALLERES --- #}
+        {% if talleres_recomendados %}
+            <h2 class="section-title" style="border-bottom-color: #9c27b0;">🌟 Talleres Recomendados para ti</h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                {% for taller in talleres_recomendados %}
+                    <div class="item-box recommended-box">
+                        {# Enlace al detalle del taller #}
+                        <h4><a href="{% url 'detalle_taller' taller_id=taller.id %}" style="color: #673ab7; text-decoration: none;">{{ taller.nombre }}</a></h4>
+                        <p style="font-size: 0.9em; margin: 5px 0;">
+                            <strong>Categoría:</strong> {{ taller.categoria.nombre|default:'General' }}<br>
+                            <strong>Fecha:</strong> {{ taller.fecha_taller|date:"d M Y" }}
+                        </p>
+                        <a href="{% url 'detalle_taller' taller_id=taller.id %}" class="btn-register" 
+                           style="display: inline-block; padding: 5px 10px; background-color: #9c27b0; color: white; border-radius: 4px; text-decoration: none; margin-top: 10px; font-size: 0.9em;">¡Ver Detalles!</a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {# --------------------------------------------------- #}
+
+        <h2 class="section-title">Historial de Inscripciones a Talleres</h2>
+
+        {% if historial_inscripciones %}
+            {% for inscripcion in historial_inscripciones %}
+                <div class="item-box {% if inscripcion.estado_pago == 'PAGADO' %}paid{% elif inscripcion.estado_pago == 'PENDIENTE' %}pending{% else %}abono{% endif %}">
+                    <h4>{{ inscripcion.taller.nombre }}</h4>
+                    <p style="font-size: 0.9em; margin: 5px 0;">
+                        <strong>Fecha Taller:</strong> {{ inscripcion.taller.fecha_taller|date:"d M Y" }} | 
+                        <strong>Fecha Inscripción:</strong> {{ inscripcion.fecha_inscripcion|date:"d M" }}
+                    </p>
+                    <p style="font-size: 0.9em; margin: 5px 0 0;">
+                        <strong>Estado de Pago:</strong> 
+                        <span style="font-weight: bold;">{{ inscripcion.get_estado_pago_display }}</span> 
+                        | 
+                        <strong>Monto Pagado:</strong> ${{ inscripcion.monto_pagado|intcomma }} / ${{ inscripcion.taller.precio|intcomma }} CLP
+                    </p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Aún no tienes inscripciones registradas. ¡Revisa nuestro <a href="{% url 'catalogo_talleres' %}">catálogo de talleres</a>!</p>
+        {% endif %}
+        
+        <h2 class="section-title">Historial de Compras de Kits/Productos</h2>
+
+        {% if historial_compras %}
+            {% for venta in historial_compras %}
+                <div class="item-box paid">
+                    <h4>Compra #{{ venta.id }} - Total: ${{ venta.monto_total|intcomma }} CLP</h4>
+                    <p style="font-size: 0.9em; margin: 5px 0;">
+                        <strong>Fecha:</strong> {{ venta.fecha_venta|date:"d M Y" }} | 
+                        <strong>Productos:</strong> 
+                        {% for detalle in venta.detalles.all %}
+                           {{ detalle.cantidad }}x {{ detalle.producto.nombre }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Aún no has comprado kits o productos.</p>
+        {% endif %}
+
+    </div>
+</div>
+
+{% endblock content %}

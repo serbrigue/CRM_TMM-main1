@@ -2,81 +2,292 @@
 {% load humanize crm_tags %}
 
 {% block content %}
+    
+    <style>
+        /* Nuevos Estilos para Filtros Amigables e Intuitivos (Estilo Tarjeta) */
+        .filter-container {
+            background: linear-gradient(to bottom right, #fff8f8, #fdf2f8);
+            border: 1px solid #fde2e8;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        .filter-section-title {
+            color: #d63384; 
+            font-weight: 800;
+            font-size: 1.3rem;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .filter-group {
+            padding: 15px;
+            border: 1px solid #f3d1d9; /* Borde rosa suave */
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .filter-group label {
+            display: block;
+            font-weight: 600;
+            color: #a61e4d;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        .filter-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            transition: border-color 0.2s;
+        }
+        
+        .filter-input:focus {
+            border-color: #d63384;
+            outline: none;
+        }
+        
+        /* --- ESTILOS DE ETIQUETAS DE INTERESES (CHIPS) --- */
+        .interest-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .interest-chip-label {
+            display: inline-flex;
+            align-items: center;
+            background-color: #f8f8f8; /* Fondo suave */
+            border: 1px solid #e91e63; /* Borde de acento */
+            color: #e91e63;
+            padding: 6px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        
+        .interest-chip-label:hover {
+            background-color: #fff0f6; /* Rosa más claro al pasar el ratón */
+        }
+        
+        .interest-chip-label input[type="checkbox"] {
+            /* Ocultar la casilla de verificación nativa */
+            display: none;
+        }
+
+        /* Estilo cuando está SELECCIONADO */
+        .interest-chip-label input[type="checkbox"]:checked + span {
+            background-color: #e91e63; /* Rosa fuerte */
+            color: white;
+            padding: 6px 10px;
+            border-radius: 20px;
+        }
+
+        .interest-chip-text {
+            /* Necesario para aplicar el estilo de fondo/color cuando está checked */
+            display: inline-block;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        /* --- FIN DE ESTILOS DE ETIQUETAS --- */
+
+        /* Estilos del Menú Desplegable (Dropdown) */
+        .action-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 180px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 10;
+            border-radius: 6px;
+            right: 0; /* Alinea el menú a la derecha del botón */
+        }
+
+        .dropdown-content button {
+            color: #333;
+            padding: 10px 16px;
+            text-decoration: none;
+            display: block;
+            width: 100%;
+            text-align: left;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: background-color 0.1s;
+        }
+
+        .dropdown-content button:hover {
+            background-color: #fdf2f8;
+            color: #d63384;
+        }
+
+        .show {
+            display: block;
+        }
+
+        /* Estilos para el Modal (mantener) */
+        #emailModal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto; 
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 10px;
+            position: relative;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-btn:hover,
+        .close-btn:focus {
+            color: #000;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .email-form-group { margin-bottom: 15px; }
+        .email-form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .email-form-group input[type="text"], .email-form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+
     <h1>Directorio de Clientes y Fidelización</h1>
     <p>Todos los contactos registrados en el CRM (B2C y B2B) para seguimiento y segmentación.</p>
 
-    {% comment %}
-        Obtenemos el valor del parámetro 'tipo' de la URL para determinar qué filtro está activo.
-    {% endcomment %}
-    {% with request.GET.tipo as tipo_activo %}
-    
-    <div style="margin-bottom: 20px;">
-        <h3 style="color: #000000; border-bottom: 2px solid #e91e63; padding-bottom: 5px; display: inline-block;">Filtros:</h3>
-        <br>
+    {% if messages %}
+        {% for message in messages %}
+            <div style="padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e5cb; border-radius: 4px; margin-bottom: 15px;">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {# CAMBIO CLAVE: Formulario de filtros usa el método GET #}
+    <form method="GET" id="filterForm" action="{% url 'listado_clientes' %}">
+        {% csrf_token %} 
+
+        <div class="filter-container">
+            <h2 class="filter-section-title">🔍 Segmentación y Filtros Avanzados</h2>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                
+                {% comment %} FILTRO 1: TIPO DE CLIENTE {% endcomment %}
+                <div class="filter-group">
+                    <label>Tipo de Cliente:</label>
+                    <select name="tipo" onchange="submitFilters()" class="filter-input">
+                        <option value="" {% if not request.GET.tipo %}selected{% endif %}>Todos</option>
+                        <option value="B2C" {% if request.GET.tipo == 'B2C' %}selected{% endif %}>Persona Natural (B2C)</option>
+                        <option value="B2B" {% if request.GET.tipo == 'B2B' %}selected{% endif %}>Empresa/Intitución (B2B)</option>
+                    </select>
+                </div>
+                
+                {% comment %} FILTRO 2: TALLERES A ASISTIR {% endcomment %}
+                <div class="filter-group">
+                    <label>Talleres a Asistir (Activos):</label>
+                    <select name="taller_asistir" onchange="submitFilters()" class="filter-input">
+                        <option value="" {% if not request.GET.taller_asistir %}selected{% endif %}>Todos los clientes</option>
+                        {% for taller in talleres_futuros %}
+                            <option value="{{ taller.id }}" 
+                                    {% if taller.id == taller_asistir_activo %}selected{% endif %}>
+                                {{ taller.nombre }} ({{ taller.fecha_taller|date:"d M" }})
+                            </option>
+                        {% empty %}
+                            <option value="" disabled>No hay talleres futuros activos</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% comment %} FILTRO 3: INTERESES (CHIPS AMIGABLES) {% endcomment %}
+                <div class="filter-group" style="min-width: 300px; flex: 2;">
+                    <label>Intereses del Cliente (Selección Múltiple):</label>
+                    <div class="interest-chips">
+                        {% for interes in todos_intereses %}
+                            <label class="interest-chip-label">
+                                <input type="checkbox" name="interes" 
+                                    value="{{ interes.id }}" 
+                                    onchange="submitFilters()"
+                                    {% if interes.id in intereses_activos %}checked{% endif %}>
+                                <span class="interest-chip-text">{{ interes.nombre }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
         
-        {% comment %} 1. Filtro 'Todos' (Activo si no hay parámetro 'tipo') {% endcomment %}
-        {% if not tipo_activo %}
-            {# Estilo activo (ROSA FUERTE con texto blanco) #}
-            <a href="{% url 'listado_clientes' %}" 
-               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
-               Todos
-            </a>
-        {% else %}
-            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
-            <a href="{% url 'listado_clientes' %}" 
-               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
-               Todos
-            </a>
-        {% endif %}
-
-        {% comment %} 2. Filtro 'Persona Natural (B2C)' {% endcomment %}
-        {% if tipo_activo == 'B2C' %}
-            {# Estilo activo (ROSA FUERTE con texto blanco) #}
-            <a href="{% url 'listado_clientes' %}?tipo=B2C" 
-               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
-               Persona Natural (B2C)
-            </a>
-        {% else %}
-            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
-            <a href="{% url 'listado_clientes' %}?tipo=B2C" 
-               style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
-               Persona Natural (B2C)
-            </a>
-        {% endif %}
-
-        {% comment %} 3. Filtro 'Empresa/Intitución (B2B)' {% endcomment %}
-        {% if tipo_activo == 'B2B' %}
-            {# Estilo activo (ROSA FUERTE con texto blanco) #}
-            <a href="{% url 'listado_clientes' %}?tipo=B2B" 
-               style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
-               Empresa/Intitución (B2B)
-            </a>
-        {% else %}
-            {# Estilo inactivo (Fondo BLANCO con borde y texto rosa) #}
-            <a href="{% url 'listado_clientes' %}?tipo=B2B" 
-               style="padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
-               Empresa/Intitución (B2B)
-            </a>
-        {% endif %}
-
-    </div>
-
-    {% endwith %}
+    </form>
     
-    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+    {# La tabla y las acciones de correo deben estar FUERA del formulario GET para permitir el envío POST forzado #}
+
+    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0;">Clientes Encontrados: {{ clientes|length }}</h3>
+        
+        <div class="action-dropdown">
+            
+            <button type="button" onclick="toggleDropdown()" 
+                    class="btn btn-register" 
+                    style="background: #e91e63; padding: 10px 20px; font-weight: bold;">
+                Acción (Lote) ▼
+            </button>
+            
+            <div id="actionDropdown" class="dropdown-content">
+                <button type="button" onclick="openEmailModal('oferta')">🎁 Enviar Oferta</button>
+                <button type="button" onclick="openEmailModal('recordatorio')">🔔 Enviar Recordatorio</button>
+                <button type="button" onclick="openEmailModal('personalizado')">✍️ Mensaje Personalizado</button>
+            </div>
+        </div>
+    </div>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-top: 5px;">
         <thead>
             <tr style="background-color: #e91e63; color: white;">
+                <th style="padding: 10px; width: 30px;"><input type="checkbox" id="selectAll"></th>
                 <th style="padding: 10px; text-align: left;">Nombre</th>
                 <th style="padding: 10px; text-align: left;">Contacto</th>
                 <th style="padding: 10px; text-align: left;">Segmento</th>
                 <th style="padding: 10px; text-align: left;">Intereses</th>
-                <th style="padding: 10px; text-align: left;">Registro</th>
                 <th style="padding: 10px;">Acción</th>
             </tr>
         </thead>
         <tbody>
             {% for cliente in clientes %}
                 <tr style="border-bottom: 1px solid #ddd; background-color: white;">
+                    <td style="padding: 10px; text-align: center;">
+                        <input type="checkbox" name="cliente_seleccionado" value="{{ cliente.id }}" class="client-checkbox">
+                    </td>
                     <td style="padding: 10px;">{{ cliente.nombre_completo }}</td>
                     <td style="padding: 10px;">
                         {{ cliente.email }}<br>
@@ -92,16 +303,183 @@
                             <small style="color: #999;">Sin intereses registrados</small>
                         {% endfor %}
                     </td>
-                    <td style="padding: 10px;">{{ cliente.fecha_registro|date:"d M Y" }}</td>
                     <td style="padding: 10px; text-align: center;">
                         <a href="{% url 'detalle_cliente_admin' cliente_id=cliente.id %}" style="color: #e91e63; text-decoration: none; font-weight: bold;">Ver Ficha »</a>
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="6" style="padding: 20px; text-align: center; background-color: #fffde7; color: #555;">No hay clientes registrados en el CRM.</td>
+                    <td colspan="6" style="padding: 20px; text-align: center; background-color: #fffde7; color: #555;">No hay clientes que coincidan con los filtros.</td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    {# --- MODAL OCULTO PARA EL CORREO --- #}
+    <div id="emailModal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Enviar Correo de Gestión</h2>
+            
+            <p>Destinatarios: <strong id="recipientCount">0</strong> clientes seleccionados.</p>
+            
+            {# TOKEN DE SEGURIDAD: Usaremos este input oculto para el CSRF en el envío POST #}
+            <input type="hidden" id="csrf_token" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+            <div class="email-form-group">
+                <label for="asunto_correo">Asunto:</label>
+                <input type="text" id="asunto_correo" name="asunto_correo" required>
+            </div>
+            
+            <div class="email-form-group">
+                <label for="mensaje_correo">Mensaje (Simulación de Cuerpo de Correo):</label>
+                <textarea id="mensaje_correo" name="mensaje_correo" rows="5" required></textarea>
+            </div>
+            
+            <button type="submit" id="submitEmailBtn" name="action" value="enviar_correo" class="btn btn-register" style="background: #2196f3; width: 100%;">
+                Simular Envío de Correo
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // -----------------------------------------------------
+        // Definiciones de Contenido para el Modal
+        // -----------------------------------------------------
+        const emailTemplates = {
+            'oferta': {
+                asunto: '🎁 ¡Nueva Oferta Exclusiva de TMM para Ti!',
+                mensaje: 'Hola [Nombre del Cliente],\n\n¡Tenemos una oferta especial basada en tus intereses en [Intereses]! No te pierdas nuestro próximo taller de [Taller].\n\nRevisa el catálogo aquí:\n[Link del Catálogo]\n\nSaludos,\nEquipo TMM'
+            },
+            'recordatorio': {
+                asunto: '🔔 Recordatorio: Tu Pago al Taller de [Taller]',
+                mensaje: 'Hola [Nombre del Cliente],\n\nTe recordamos que tienes un cupo reservado para el taller de [Taller] con el estado de pago [Estado].\n\nPor favor, completa el pago para asegurar tu asistencia:\n[Link de Pago Simulado]\n\n¡Te esperamos!\nEquipo TMM'
+            },
+            'personalizado': {
+                asunto: '',
+                mensaje: 'Hola [Nombre del Cliente],\n\nEscribe tu mensaje personalizado aquí...\n\nSaludos,\n'
+            }
+        };
+
+        // -----------------------------------------------------
+        // Funciones de Envío y Control
+        // -----------------------------------------------------
+        const filterForm = document.getElementById('filterForm');
+        
+        function toggleDropdown() {
+            document.getElementById("actionDropdown").classList.toggle("show");
+        }
+        
+        // Función para enviar los filtros (uso GET en el formulario principal)
+        function submitFilters() {
+            filterForm.submit();
+        }
+
+        // Función para abrir el modal y pre-cargar el asunto/mensaje
+        function openEmailModal(templateKey) {
+            const checkboxes = document.querySelectorAll('.client-checkbox');
+            const emailModal = document.getElementById('emailModal');
+            
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            if (checkedCount === 0) {
+                alert('Debes seleccionar al menos un cliente para enviar un correo.');
+                return;
+            }
+            
+            const template = emailTemplates[templateKey];
+            document.getElementById('asunto_correo').value = template.asunto;
+            document.getElementById('mensaje_correo').value = template.mensaje;
+            
+            // Abrir el modal y cerrar el dropdown
+            document.getElementById("actionDropdown").classList.remove("show");
+            emailModal.style.display = 'block';
+        }
+
+        // FUNCIÓN CLAVE PARA CORREGIR EL 404: Crea un formulario POST temporal
+        document.getElementById('submitEmailBtn').addEventListener('click', function(event) {
+            event.preventDefault(); // Detener la acción por defecto
+            
+            // Validar que haya clientes seleccionados (aunque ya se validó antes, es una seguridad)
+            const checkboxes = document.querySelectorAll('.client-checkbox');
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            if (checkedCount === 0) {
+                alert('Debes seleccionar al menos un cliente para enviar un correo.');
+                return;
+            }
+
+            // 1. Crear un formulario POST temporal y limpio
+            const postForm = document.createElement('form');
+            postForm.method = 'POST';
+            // Usar la URL limpia de listado_clientes
+            postForm.action = "{% url 'listado_clientes' %}"; 
+
+            // 2. Añadir CSRF token
+            const csrfToken = document.getElementById('csrf_token');
+            postForm.appendChild(csrfToken.cloneNode(true));
+            
+            // 3. Añadir campos del modal (asunto, mensaje, y el identificador de acción)
+            postForm.appendChild(document.getElementById('asunto_correo').cloneNode(true));
+            postForm.appendChild(document.getElementById('mensaje_correo').cloneNode(true));
+
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'action'; 
+            actionInput.value = 'enviar_correo';
+            postForm.appendChild(actionInput);
+
+            // 4. Añadir SOLO los checkboxes seleccionados (los IDs de los clientes)
+            document.querySelectorAll('.client-checkbox:checked').forEach(checkbox => {
+                postForm.appendChild(checkbox.cloneNode(true));
+            });
+            
+            // 5. Enviar el formulario POST
+            document.body.appendChild(postForm);
+            postForm.submit();
+        });
+        
+        // -----------------------------------------------------
+        // Lógica de Selección de Clientes (ya existente)
+        // -----------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.client-checkbox');
+            const closeModalBtn = document.querySelector('.close-btn');
+            const emailModal = document.getElementById('emailModal');
+            const recipientCount = document.getElementById('recipientCount');
+
+            // Actualiza el contador de destinatarios
+            function updateRecipientCount() {
+                const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+                recipientCount.textContent = checkedCount;
+            }
+
+            // Lógica Seleccionar Todos
+            selectAll.addEventListener('change', function() {
+                checkboxes.forEach(cb => {
+                    cb.checked = selectAll.checked;
+                });
+                updateRecipientCount();
+            });
+
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', updateRecipientCount);
+            });
+            
+            // Lógica para cerrar el modal
+            closeModalBtn.addEventListener('click', function() {
+                emailModal.style.display = 'none';
+            });
+
+            window.addEventListener('click', function(event) {
+                if (event.target == emailModal) {
+                    emailModal.style.display = 'none';
+                }
+            });
+
+            // Inicializar el contador al cargar
+            updateRecipientCount();
+        });
+    </script>
 {% endblock content %}

@@ -191,6 +191,28 @@
             padding: 10px 0;
         }
     }
+.tmm-btn-add {
+        padding: 15px 30px;
+        background-color: #28a745; /* Verde para 'Añadir' */
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.2em;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: background-color 0.15s ease, transform 0.05s ease;
+        box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+    }
+    .tmm-btn-add:hover {
+        background-color: #218838;
+    }
+    .tmm-btn-add:disabled {
+        background-color: #6c757d; /* Gris para deshabilitado */
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    /* ... (estilos existentes) ... */
 </style>
 
 <a href="{% url 'catalogo_productos' %}" class="tmm-back-link">« Volver al Catálogo de Kits</a>
@@ -226,9 +248,13 @@
         </div>
         
         {% if producto.esta_disponible %}
-            <button class="tmm-btn-add" disabled>
-                (Pronto) Añadir al Carrito 🛒
-            </button>
+            {# FORMULARIO PARA AÑADIR AL CARRITO #}
+            <form method="POST" action="{% url 'agregar_a_carrito' producto_id=producto.id %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="tmm-btn-add">
+                    🛒 Añadir al Carrito
+                </button>
+            </form>
         {% else %}
             <p class="tmm-sold-out">
                 ¡Producto Agotado! 😞

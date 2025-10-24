@@ -1,0 +1,123 @@
+// crm/templates/crm/carrito.html
+
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+<style>
+    .cart-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .cart-item {
+        display: flex;
+        align-items: center;
+        padding: 15px 0;
+        border-bottom: 1px solid #eee;
+    }
+    .cart-item-info {
+        flex-grow: 1;
+    }
+    .cart-item-price {
+        font-weight: bold;
+        color: #d63384;
+        width: 100px;
+        text-align: right;
+    }
+    .cart-item-actions {
+        width: 150px;
+        text-align: right;
+    }
+    .cart-item-actions input[type="number"] {
+        width: 60px;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        text-align: center;
+    }
+    .checkout-summary {
+        margin-top: 30px;
+        border-top: 2px solid #d63384;
+        padding-top: 20px;
+        text-align: right;
+    }
+    .checkout-summary h3 {
+        margin: 5px 0;
+        font-size: 1.5em;
+        color: #d63384;
+    }
+    .checkout-btn {
+        padding: 12px 25px;
+        background-color: #4caf50; /* Verde de checkout */
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        margin-top: 15px;
+        display: inline-block;
+        transition: background-color 0.2s;
+    }
+    .checkout-btn:hover {
+        background-color: #388e3c;
+    }
+</style>
+
+<div class="cart-container">
+    <h1>🛒 Mi Carrito de Compras</h1>
+
+    {% if items %}
+        <div style="border-bottom: 1px solid #d63384; padding: 10px 0; font-weight: bold; display: flex;">
+            <div style="flex-grow: 1;">Producto</div>
+            <div style="width: 150px; text-align: center;">Cantidad</div>
+            <div style="width: 100px; text-align: right;">Subtotal</div>
+        </div>
+
+        {% for item in items %}
+            <div class="cart-item">
+                <div class="cart-item-info">
+                    <h4>{{ item.producto.nombre }}</h4>
+                    <small>Precio unitario: ${{ item.precio_unitario|intcomma }} CLP</small>
+                </div>
+
+                <div class="cart-item-actions">
+                    <form method="POST" action="{% url 'actualizar_carrito' %}" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="producto_id" value="{{ item.producto.id }}">
+                        <input type="number" name="cantidad" value="{{ item.cantidad }}" min="0" onchange="this.form.submit()">
+                        <noscript><button type="submit">Actualizar</button></noscript>
+                    </form>
+                </div>
+                
+                <div class="cart-item-price">
+                    ${{ item.subtotal|intcomma }}
+                </div>
+            </div>
+        {% endfor %}
+
+        <div class="checkout-summary">
+            <p>Subtotal: ${{ subtotal_general|intcomma }} CLP</p>
+            <h3>Total Final: ${{ total_final|intcomma }} CLP</h3>
+
+            <a href="{% url 'finalizar_compra' %}" class="checkout-btn">
+                ✅ Finalizar Compra y Pagar
+            </a>
+            
+            <p style="font-size: 0.85em; color: #666; margin-top: 10px;">
+                *El proceso de pago es simulado en este punto, registrará la compra como PAGADA.
+            </p>
+        </div>
+
+    {% else %}
+        <div style="text-align: center; padding: 50px; border: 1px dashed #ccc; border-radius: 8px;">
+            <p style="font-size: 1.2em; color: #d63384;">Tu carrito está vacío.</p>
+            <a href="{% url 'catalogo_productos' %}" style="text-decoration: none; color: #4a4a4a; font-weight: bold;">
+                ← Volver al Catálogo de Productos
+            </a>
+        </div>
+    {% endif %}
+
+</div>
+
+{% endblock content %}

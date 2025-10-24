@@ -1,12 +1,20 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages 
 from django.db.models import F,Sum, Count, Q, Max 
-from .models import Taller, Cliente, Inscripcion, Producto
+from .models import Taller, Cliente, Inscripcion, Producto, Interes
 from django.contrib.auth.decorators import login_required,user_passes_test
 from django.db.models.functions import TruncMonth, ExtractMonth, ExtractYear
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login 
 from .forms import RegistroClienteForm
+from django.utils import timezone
+from django.core.mail import send_mail 
+from django.conf import settings
+from decimal import Decimal 
+from django.db import transaction
+import calendar
+import datetime 
+from datetime import date
 
 def home(request):
     """
@@ -302,22 +310,90 @@ def panel_reportes(request):
     return render(request, 'crm/panel_reportes.html', context)
 
 
-user_passes_test(is_superuser)
+@user_passes_test(is_superuser)
 def listado_clientes(request):
     """
     Vista protegida para que la administradora vea y filtre todos los clientes registrados.
+    Permite filtrar por tipo de cliente, intereses (múltiples) y talleres a asistir.
+    Permite la gestión de correos por lote.
     """
-    # Filtros simples de ejemplo (pueden expandirse en el futuro)
+    # 1. Filtros y Variables (Lógica GET)
     tipo_cliente_filtro = request.GET.get('tipo', None)
+    intereses_filtro = request.GET.getlist('interes', []) 
+    taller_asistir_filtro = request.GET.get('taller_asistir', None) 
     
     clientes = Cliente.objects.all().order_by('-fecha_registro')
-
+    
+    # --- Lógica de Filtrado (Se mantiene igual) ---
     if tipo_cliente_filtro:
         clientes = clientes.filter(tipo_cliente=tipo_cliente_filtro)
+    
+    if intereses_filtro:
+        clientes = clientes.filter(intereses_cliente__id__in=intereses_filtro).distinct()
+
+    if taller_asistir_filtro and taller_asistir_filtro.isdigit():
+        taller_id = int(taller_asistir_filtro)
+        clientes = clientes.filter(
+            inscripciones__taller__id=taller_id,
+            inscripciones__estado_pago__in=['PENDIENTE', 'ABONADO', 'PAGADO'] 
+        ).distinct()
+
+    # --- Lógica de Acción por Lote (CORRECCIÓN: Se procesa el POST) ---
+    if request.method == 'POST':
+        cliente_ids = request.POST.getlist('cliente_seleccionado')
+        asunto = request.POST.get('asunto_correo')
+        mensaje = request.POST.get('mensaje_correo')
         
+        if cliente_ids:
+            clientes_seleccionados = Cliente.objects.filter(id__in=cliente_ids)
+            destinatarios = [c.email for c in clientes_seleccionados]
+            
+            num_enviados = len(destinatarios)
+
+            if asunto and mensaje:
+                try:
+                    # 🚀 IMPLEMENTACIÓN REAL DE ENVÍO DE CORREO CORREGIDA
+                    # Se utiliza 'recipient_list=destinatarios' para asegurar la compatibilidad 
+                    # y se quita el argumento 'bcc' no soportado.
+                    
+                    send_mail(
+                        subject=asunto,
+                        # Es buena práctica incluir el número de envíos en el mensaje para trazabilidad.
+                        message=f"Mensaje: {mensaje}\n\n(Nota: Este correo fue enviado a un total de {num_enviados} destinatarios.)\n",
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        # Se usa recipient_list para enviar el correo a todos los destinatarios
+                        recipient_list=destinatarios, 
+                        fail_silently=False,
+                    )
+                    
+                    messages.success(request, f'¡Correo enviado con éxito! Se envió a {num_enviados} clientes con el asunto: "{asunto}".')
+
+                except Exception as e:
+                    # Si falla, te mostrará el error en la consola
+                    messages.error(request, f'Error al intentar enviar el correo: {e}')
+            else:
+                messages.error(request, 'Error: Debe ingresar Asunto y Mensaje para enviar el correo.')
+        
+        # Redirigir para mantener los filtros activos
+        url_params = request.GET.urlencode()
+        return redirect(f'{request.path}?{url_params}')
+
+
+    # Obtenemos datos para el Contexto (Lógica GET)
+    todos_intereses = Interes.objects.all().order_by('nombre')
+    
+    talleres_futuros = Taller.objects.filter(
+        esta_activo=True, 
+        fecha_taller__gte=timezone.now().date()
+    ).order_by('fecha_taller')
+
     context = {
         'titulo': 'Listado de Clientes CRM',
         'clientes': clientes,
+        'todos_intereses': todos_intereses,
+        'intereses_activos': [int(i) for i in intereses_filtro if i.isdigit()] if intereses_filtro else [], 
+        'talleres_futuros': talleres_futuros,
+        'taller_asistir_activo': int(taller_asistir_filtro) if taller_asistir_filtro and taller_asistir_filtro.isdigit() else None,
     }
     return render(request, 'crm/listado_clientes.html', context)
 
@@ -366,4 +442,277 @@ def detalle_producto(request, producto_id):
         'producto': producto,
     }
     # NOTA: En un proyecto completo, aquí se manejaría el formulario "Añadir al Carrito"
+    return render(request, 'crm/detalle_producto.html', context)
+
+@login_required 
+def perfil_usuario(request):
+    """
+    Vista protegida que muestra el perfil, información personal y historial 
+    de inscripciones/compras del cliente actual.
+    INCLUYE RECOMENDACIONES DE TALLERES Y DATOS PARA EL CALENDARIO.
+    """
+    try:
+        # 1. Obtener el objeto Cliente asociado al usuario autenticado
+        cliente = Cliente.objects.get(email=request.user.email)
+    except Cliente.DoesNotExist:
+        cliente = None 
+        messages.warning(request, "Tu perfil de cliente aún no ha sido creado. Inscríbete a un taller para completarlo.")
+        
+    historial_inscripciones = None
+    historial_compras = None
+    talleres_recomendados = None 
+    fechas_cursos_activas = set() 
+    
+    # 3. Lógica del Calendario: Obtener las fechas de los cursos
+    today = timezone.localdate()
+    current_year = today.year
+    current_month = today.month
+    
+    if cliente:
+        # Historial (solo inscripciones que impliquen asistencia/pago)
+        historial_inscripciones = cliente.inscripciones.all().order_by('-taller__fecha_taller')
+        historial_compras = cliente.compras_kits.all().order_by('-fecha_venta')
+
+        # Obtener todas las fechas de los talleres pagados/pendientes/abonados (futuros o de hoy)
+        fechas_raw = cliente.inscripciones.filter(
+            estado_pago__in=['PENDIENTE', 'PAGADO', 'ABONADO'],
+            taller__fecha_taller__gte=today 
+        ).values_list('taller__fecha_taller', flat=True)
+        
+        # Almacenar las fechas en un set para búsqueda rápida
+        fechas_cursos_activas = {f for f in fechas_raw}
+        
+        # --- LÓGICA CORREGIDA PARA SELECCIONAR EL MES ---
+        # 1. Verificar si hay cursos en el mes actual (incluyendo el año)
+        cursos_en_mes_actual = [
+            f for f in fechas_cursos_activas 
+            if f.month == today.month and f.year == today.year
+        ]
+        
+        if not cursos_en_mes_actual and fechas_cursos_activas:
+            # 2. Si NO hay cursos en el mes actual, pero sí hay cursos futuros,
+            #    saltamos al mes del curso más próximo (el que antes te saltaba a 2025).
+            proxima_fecha = min(fechas_cursos_activas)
+            current_year = proxima_fecha.year
+            current_month = proxima_fecha.month
+        # Si hay cursos en el mes actual, se mantiene el mes actual por defecto.
+        # ------------------------------------------------
+
+        # Lógica de Recomendación 
+        intereses_cliente = cliente.intereses_cliente.all()
+        
+        if intereses_cliente.exists():
+            interes_ids = [interes.id for interes in intereses_cliente]
+            talleres_recomendados = Taller.objects.filter(
+                esta_activo=True, 
+                fecha_taller__gte=today,
+                categoria__id__in=interes_ids 
+            ).exclude(
+                inscripciones__cliente=cliente 
+            ).distinct().order_by('fecha_taller')[:4]
+        
+    # 4. Construir la matriz del calendario para la plantilla
+    cal = calendar.Calendar()
+    # Usa el mes y año determinado por la lógica de arriba
+    mes_calendario = cal.monthdatescalendar(current_year, current_month)
+    
+    # 5. Mapear los nombres de los meses a español
+    month_name = datetime.date(current_year, current_month, 1).strftime('%B')
+    
+    context = {
+        'titulo': f'Perfil de {request.user.first_name}',
+        'cliente': cliente,
+        'user_django': request.user, 
+        'historial_inscripciones': historial_inscripciones,
+        'historial_compras': historial_compras,
+        'talleres_recomendados': talleres_recomendados,
+        # --- DATOS DEL CALENDARIO ---
+        'mes_calendario': mes_calendario, # La matriz de semanas y días
+        'fechas_cursos_activas': fechas_cursos_activas, # Set de fechas clave (date objects)
+        'mes_actual_nombre': month_name.capitalize(),
+        'anio_actual': current_year,
+        'current_month': current_month, # Se usa en el template para filtrar los días correctos
+        # ----------------------------
+    }
+    
+    return render(request, 'crm/profile.html', context)
+
+
+
+def get_carrito(request):
+    """Obtiene el carrito de la sesión. Si no existe, lo inicializa."""
+    if 'carrito' not in request.session:
+        # Estructura del carrito: { 'producto_id': {'cantidad': X, 'precio': Y} }
+        request.session['carrito'] = {}
+    return request.session['carrito']
+
+def guardar_carrito(request, carrito):
+    """Guarda el carrito actualizado en la sesión."""
+    request.session['carrito'] = carrito
+    # Marcar la sesión como modificada para asegurar que se guarde en la base de datos
+    request.session.modified = True 
+
+def agregar_a_carrito(request, producto_id):
+    """Añade un producto al carrito, manejando el incremento de cantidad."""
+    producto = get_object_or_404(Producto, pk=producto_id, esta_disponible=True)
+    carrito = get_carrito(request)
+
+    # Se usa str(producto_id) porque las claves de sesión deben ser strings
+    producto_id_str = str(producto_id)
+
+    if producto_id_str in carrito:
+        carrito[producto_id_str]['cantidad'] += 1
+    else:
+        carrito[producto_id_str] = {
+            'cantidad': 1,
+            # Almacenamos el precio de venta actual del producto en el carrito
+            'precio': str(producto.precio_venta), 
+        }
+
+    guardar_carrito(request, carrito)
+    messages.success(request, f'"{producto.nombre}" agregado al carrito.')
+    return redirect('ver_carrito')
+
+
+def actualizar_carrito(request):
+    """Actualiza o elimina items del carrito basado en el formulario POST."""
+    if request.method == 'POST':
+        carrito = get_carrito(request)
+        
+        producto_id = request.POST.get('producto_id')
+        nueva_cantidad = request.POST.get('cantidad')
+        
+        if producto_id in carrito:
+            try:
+                nueva_cantidad = int(nueva_cantidad)
+                
+                if nueva_cantidad > 0:
+                    carrito[producto_id]['cantidad'] = nueva_cantidad
+                    messages.success(request, 'Cantidad actualizada.')
+                else:
+                    del carrito[producto_id]
+                    messages.warning(request, 'Producto eliminado del carrito.')
+                    
+                guardar_carrito(request, carrito)
+                
+            except ValueError:
+                messages.error(request, 'Cantidad inválida.')
+        
+    return redirect('ver_carrito')
+
+
+def ver_carrito(request):
+    """Muestra el contenido detallado del carrito."""
+    carrito_data = get_carrito(request)
+    
+    # Lista para almacenar los objetos Producto y sus datos del carrito
+    items = []
+    subtotal_general = Decimal(0)
+    
+    for id_str, data in carrito_data.items():
+        try:
+            producto = Producto.objects.get(pk=int(id_str))
+            cantidad = data['cantidad']
+            # Convertir el precio de str a Decimal para el cálculo
+            precio = Decimal(data['precio']) 
+            subtotal = precio * Decimal(cantidad)
+            subtotal_general += subtotal
+            
+            items.append({
+                'producto': producto,
+                'cantidad': cantidad,
+                'precio_unitario': precio,
+                'subtotal': subtotal,
+            })
+        except Producto.DoesNotExist:
+            # Si el producto ya no existe, lo eliminamos del carrito
+            del carrito_data[id_str]
+            guardar_carrito(request, carrito_data)
+            
+    context = {
+        'titulo': 'Mi Carrito de Compras',
+        'items': items,
+        'subtotal_general': subtotal_general,
+        'impuesto': Decimal(0), # TMM no mencionó IVA/impuestos. Dejar en 0.
+        'total_final': subtotal_general,
+    }
+    return render(request, 'crm/carrito.html', context)
+
+
+@transaction.atomic
+def finalizar_compra(request):
+    """Procesa el pago y registra la venta y detalles. REQUIERE AUTENTICACIÓN."""
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Debes iniciar sesión o registrarte para completar la compra.')
+        return redirect('login') 
+
+    carrito_data = get_carrito(request)
+    if not carrito_data:
+        messages.error(request, 'El carrito está vacío.')
+        return redirect('ver_carrito')
+
+    # 1. Obtener el cliente (o crearlo si solo existe el usuario Django)
+    try:
+        cliente = Cliente.objects.get(email=request.user.email)
+    except Cliente.DoesNotExist:
+        cliente, _ = Cliente.objects.get_or_create(
+            email=request.user.email,
+            defaults={'nombre_completo': request.user.get_full_name() or request.user.username}
+        )
+
+    subtotal_general = Decimal(0)
+    
+    # 2. Registrar la Venta (VentaProducto)
+    # Creamos la venta primero con monto 0, se actualizará al final
+    venta = VentaProducto.objects.create(
+        cliente=cliente,
+        monto_total=Decimal(0), 
+        estado_pago='PENDIENTE' # Asumimos que el pago es pendiente hasta confirmación (simulada)
+    )
+
+    # 3. Registrar Detalles y Actualizar Stock (y calcular monto total)
+    for id_str, data in carrito_data.items():
+        producto = get_object_or_404(Producto, pk=int(id_str))
+        cantidad = data['cantidad']
+        precio_unitario = Decimal(data['precio'])
+        subtotal = precio_unitario * Decimal(cantidad)
+        subtotal_general += subtotal
+
+        # Nota: Aquí se DEBERÍA restar stock, pero no tenemos el campo stock_actual aún.
+        # Asumimos que el stock es ilimitado por ahora.
+
+        DetalleVenta.objects.create(
+            venta=venta,
+            producto=producto,
+            cantidad=cantidad,
+            precio_unitario=precio_unitario,
+        )
+
+    # 4. Actualizar Monto Total y marcar como PAGADO (Simulación de pago finalizado)
+    venta.monto_total = subtotal_general
+    venta.estado_pago = 'PAGADO' # Simulación: Pago se realiza en este paso
+    venta.save()
+    
+    # 5. Limpiar Carrito y Mensaje
+    del request.session['carrito']
+    request.session.modified = True
+    
+    messages.success(request, f'¡Compra finalizada y pagada con éxito! Total: ${venta.monto_total} CLP.')
+    return redirect('home')
+
+
+# ... (resto de funciones) ...
+
+# Modificar Detalle Producto para permitir agregar al carrito
+def detalle_producto(request, producto_id):
+    """
+    Muestra la información de un Kit/Producto específico.
+    """
+    producto = get_object_or_404(Producto, pk=producto_id)
+    
+    context = {
+        'titulo': f'Detalle de Kit: {producto.nombre}',
+        'producto': producto,
+    }
+    # NOTA: La plantilla tendrá el botón para agregar al carrito
     return render(request, 'crm/detalle_producto.html', context)

@@ -167,6 +167,30 @@
         .b2b {
             border-left: 6px solid #ff922b;
         }
+        /* Estilo para el botón de perfil */
+        .btn-profile {
+            background: #fff;
+            border: 2px solid #9c27b0; /* Color púrpura/magenta */
+            color: #9c27b0; 
+            font-weight: 600;
+            padding: 8px 10px; /* Más pequeño para el ícono */
+        }
+        .btn-profile:hover {
+             background: #f3e5f5; /* Color claro al pasar el ratón */
+             color: #673ab7;
+        }
+        /* Estilo para el botón de Carrito */
+        .btn-cart {
+            background: #4caf50; /* Verde de éxito */
+            color: white;
+            border: none;
+            padding: 8px 10px;
+            font-size: 0.95rem;
+        }
+        .btn-cart:hover {
+            background: #388e3c; /* Verde oscuro */
+            color: white;
+        }
 
     </style>
 </head>
@@ -181,11 +205,22 @@
             <a href="{% url 'home' %}" class="nav-btn">Inicio</a>
             <a href="{% url 'catalogo_talleres' %}" class="nav-btn">Talleres</a>
             <a href="{% url 'catalogo_productos' %}" class="nav-btn">Kits y Productos</a>
+            
+            {# --- NUEVO BOTÓN DE CARRITO EN LA NAVEGACIÓN PRINCIPAL --- #}
+            <a href="{% url 'ver_carrito' %}" class="btn btn-cart" title="Ver mi carrito">
+                 🛒 Carrito
+            </a>
+            {# -------------------------------------------------------- #}
         </nav>
         
         <div class="auth-actions">
             {% if user.is_authenticated %}
                 <span>Hola, <strong>{{ user.first_name|default:user.username }}</strong> 👋</span>
+                
+                <a href="{% url 'perfil_usuario' %}" class="btn btn-profile" title="Mi Perfil">
+                    👤 Mi Perfil
+                </a>
+                
                 <form method="POST" action="{% url 'logout' %}" style="display:inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-login">Cerrar Sesión</button>
