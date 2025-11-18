@@ -1,20 +1,27 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages 
-from django.db.models import F,Sum, Count, Q, Max 
-from .models import Taller, Cliente, Inscripcion, Producto, Interes
-from django.contrib.auth.decorators import login_required,user_passes_test
-from django.db.models.functions import TruncMonth, ExtractMonth, ExtractYear
+from django.contrib import messages
+from django.db.models import F, Sum, Count, Q, Max
+# Importa IntegrityError para manejo específico de errores de base de datos
+from django.db import IntegrityError
+from .models import Taller, Cliente, Inscripcion, Producto, Interes, DetalleVenta, VentaProducto # Asegúrate de importar los modelos de Venta
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.db.models.functions import TruncMonth
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login 
+from django.contrib.auth import login
 from .forms import RegistroClienteForm
+from .utils.enrollment import enroll_cliente_en_taller
 from django.utils import timezone
-from django.core.mail import send_mail 
+from django.core.mail import send_mail, BadHeaderError # Importa BadHeaderError
 from django.conf import settings
-from decimal import Decimal 
+from decimal import Decimal
 from django.db import transaction
 import calendar
-import datetime 
+import datetime
 from datetime import date
+from django.contrib.auth.views import LoginView as DjangoLoginView
+from django.http import HttpResponseRedirect
+from django.contrib.auth import logout as auth_logout
+
 
 def home(request):
     """
@@ -43,96 +50,74 @@ def detalle_taller_inscripcion(request, taller_id):
     """
     Muestra la información de un taller y maneja el formulario de inscripción.
     Si la inscripción es exitosa, asigna la categoría del taller como interés al cliente.
+    MEJORA: Manejo específico de IntegrityError.
     """
     taller = get_object_or_404(Taller, pk=taller_id)
-    
+
     if request.method == 'POST':
-        
-        # 1. Validación inicial de cupos
-        if taller.cupos_disponibles <= 0:
-            messages.error(request, '¡Lo sentimos! Los cupos para este taller se han agotado.')
+        # Obtener datos del form (soporta usuarios autenticados y anónimos)
+        nombre = request.POST.get('nombre', '').strip()
+        email = request.POST.get('email', '').strip()
+        telefono = request.POST.get('telefono', '').strip()
+
+        usuario = request.user if request.user.is_authenticated else None
+
+        # Si el usuario no está autenticado, requerimos nombre y email
+        if usuario is None and (not nombre or not email):
+            messages.error(request, 'Debes ingresar tu nombre y email, o iniciar sesión.')
             return redirect('detalle_taller', taller_id=taller.id)
 
-        # 2. Determinar si el cliente está autenticado o es anónimo
-        if request.user.is_authenticated:
-            # Opción A: Usuario Logueado
-            cliente_email = request.user.email
-            cliente_nombre = request.user.get_full_name() or request.user.username
+        inscripcion, created, msg = enroll_cliente_en_taller(taller.id, nombre, email, telefono=telefono, usuario=usuario)
 
-            cliente, created = Cliente.objects.get_or_create(
-                email=cliente_email,
-                defaults={'nombre_completo': cliente_nombre}
-            )
-            
-        else:
-            # Opción B: Usuario Anónimo (Se registra con formulario)
-            cliente_nombre = request.POST.get('nombre')
-            cliente_email = request.POST.get('email')
-            
-            if not cliente_nombre or not cliente_email:
-                messages.error(request, 'Debes ingresar tu nombre y email, o iniciar sesión.')
-                return redirect('detalle_taller', taller_id=taller.id)
-            
-            cliente, created = Cliente.objects.get_or_create(
-                email=cliente_email,
-                defaults={'nombre_completo': cliente_nombre}
-            )
-
-        # 3. Creación Atómica de la Inscripción y Segmentación
-        try:
-            Inscripcion.objects.create(
-                cliente=cliente,
-                taller=taller,
-                estado_pago='PENDIENTE' 
-            )
-            
-            # --- LÓGICA DE SEGMENTACIÓN AUTOMÁTICA ---
-            # Si el taller tiene una categoría asignada (Interes), la agregamos al perfil del cliente.
-            if taller.categoria:
-                # El método .add() maneja automáticamente si el interés ya existe
-                cliente.intereses_cliente.add(taller.categoria) 
-            # ----------------------------------------
-            
-            # 4. Actualización Atómica del Cupo (CRÍTICO)
-            Taller.objects.filter(id=taller.id).update(cupos_disponibles=F('cupos_disponibles') - 1)
-
+        if created:
             messages.success(request, f'¡Inscripción exitosa! Cupo reservado para {taller.nombre}. Ahora puedes proceder al pago.')
-            
-            return redirect('pago_simulado', inscripcion_id=Inscripcion.objects.last().id) 
-
-        except Exception:
-            # Esto captura si el cliente ya está inscrito (debido al unique_together en Inscripcion)
-            messages.warning(request, f'Ya estás inscrito(a) en el taller: {taller.nombre}. ¡Revisa tu correo o inicia sesión!')
+            return redirect('pago_simulado', inscripcion_id=inscripcion.id)
+        else:
+            if msg == 'No hay cupos disponibles':
+                messages.error(request, '¡Lo sentimos! Los cupos para este taller se han agotado.')
+            elif msg.startswith('Cliente ya inscrito'):
+                messages.warning(request, f'Ya estás inscrito(a) en el taller: {taller.nombre}. ¡Revisa tu correo o inicia sesión!')
+            else:
+                messages.error(request, f'Ocurrió un error al inscribirte: {msg}')
             return redirect('detalle_taller', taller_id=taller.id)
+
 
     # Datos para la plantilla (Solicitud GET)
     context = {
         'titulo': f'Detalle: {taller.nombre}',
         'taller': taller,
-        # Indicamos si el formulario de inscripción debe ser visible (lógica en base.html)
-        'show_form': not request.user.is_authenticated 
+        'show_form': not request.user.is_authenticated
     }
     return render(request, 'crm/detalle_taller.html', context)
 
 def pago_simulado(request, inscripcion_id):
     """
     Vista de ejemplo para simular la página de pago después de la inscripción.
-    Se utiliza el estado 'PAGADO' como estado final de pago.
+    MEJORA: Añade botones para simular éxito o fallo.
     """
     inscripcion = get_object_or_404(Inscripcion, pk=inscripcion_id)
-    
-    # Simular que el pago se realiza con éxito al hacer POST
+
     if request.method == 'POST':
-        # Verificamos que el estado no sea ya el estado final
-        if inscripcion.estado_pago == 'PENDIENTE' or inscripcion.estado_pago == 'ABONADO':
-            inscripcion.estado_pago = 'PAGADO'  # Estado de pago final completo
+        # Determinar qué botón se presionó (si se implementan en el HTML)
+        accion = request.POST.get('accion_pago', 'pagar') # Por defecto, asume pago exitoso
+
+        if inscripcion.estado_pago == 'PAGADO':
+             messages.info(request, 'Esta inscripción ya fue pagada.')
+             return redirect('home')
+
+        if accion == 'pagar':
+            # Simular pago exitoso
+            inscripcion.estado_pago = 'PAGADO'
             inscripcion.monto_pagado = inscripcion.taller.precio # Simula pago completo
             inscripcion.save()
             messages.success(request, '¡Pago procesado con éxito! Tu cupo está 100% asegurado.')
             return redirect('home')
-        else:
-            messages.info(request, 'Esta inscripción ya fue pagada.')
-            return redirect('home')
+        elif accion == 'fallar':
+             # Simular pago fallido (opcional)
+             messages.error(request, 'El pago falló. Por favor, intenta nuevamente.')
+             # No cambia el estado, redirige de vuelta a la misma página
+             return redirect('pago_simulado', inscripcion_id=inscripcion.id)
+        # Se podrían añadir más acciones (ej. cancelar)
 
     context = {
         'titulo': f'Pago Pendiente: {inscripcion.taller.nombre}',
@@ -143,31 +128,27 @@ def pago_simulado(request, inscripcion_id):
 
 def registro_cliente(request):
     """
-    Vista para manejar el registro de nuevos clientes.
+    Vista para el registro de nuevos clientes.
     """
     if request.method == 'POST':
         form = RegistroClienteForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            
-            # Autenticar al usuario inmediatamente después del registro
-            login(request, user)
-            
-            messages.success(request, '¡Registro exitoso! Ya tienes una cuenta en TMM.')
-            # Redirigir a una página de bienvenida o al catálogo
-            return redirect('catalogo_talleres') 
+            usuario = form.save()
+            login(request, usuario)
+            messages.success(request, '¡Registro exitoso! Bienvenido(a) a TMM.')
+            return redirect('home')
         else:
-            # Si el formulario no es válido (ej. email ya existe), mostrar errores
-            messages.error(request, 'Error al registrar. Revisa los datos ingresados.')
+            messages.error(request, 'Por favor corrige los errores en el formulario.')
     else:
-        # Si es una solicitud GET, mostramos el formulario vacío
         form = RegistroClienteForm()
-        
+
     context = {
         'titulo': 'Registro de Cliente',
         'form': form,
     }
     return render(request, 'crm/registro_cliente.html', context)
+
+
 
 def is_superuser(user):
     return user.is_superuser
@@ -316,74 +297,74 @@ def listado_clientes(request):
     Vista protegida para que la administradora vea y filtre todos los clientes registrados.
     Permite filtrar por tipo de cliente, intereses (múltiples) y talleres a asistir.
     Permite la gestión de correos por lote.
+    MEJORA: Manejo de errores en envío de correo.
     """
-    # 1. Filtros y Variables (Lógica GET)
+    # 1. Filtros y Variables (Lógica GET - se mantiene igual)
     tipo_cliente_filtro = request.GET.get('tipo', None)
-    intereses_filtro = request.GET.getlist('interes', []) 
-    taller_asistir_filtro = request.GET.get('taller_asistir', None) 
-    
+    intereses_filtro = request.GET.getlist('interes', [])
+    taller_asistir_filtro = request.GET.get('taller_asistir', None)
+
     clientes = Cliente.objects.all().order_by('-fecha_registro')
-    
+
     # --- Lógica de Filtrado (Se mantiene igual) ---
     if tipo_cliente_filtro:
         clientes = clientes.filter(tipo_cliente=tipo_cliente_filtro)
-    
     if intereses_filtro:
-        clientes = clientes.filter(intereses_cliente__id__in=intereses_filtro).distinct()
-
+        # Asegurarse que los IDs son números antes de filtrar
+        interes_ids_int = [int(i) for i in intereses_filtro if i.isdigit()]
+        if interes_ids_int:
+            clientes = clientes.filter(intereses_cliente__id__in=interes_ids_int).distinct()
     if taller_asistir_filtro and taller_asistir_filtro.isdigit():
         taller_id = int(taller_asistir_filtro)
         clientes = clientes.filter(
             inscripciones__taller__id=taller_id,
-            inscripciones__estado_pago__in=['PENDIENTE', 'ABONADO', 'PAGADO'] 
+            inscripciones__estado_pago__in=['PENDIENTE', 'ABONADO', 'PAGADO']
         ).distinct()
 
-    # --- Lógica de Acción por Lote (CORRECCIÓN: Se procesa el POST) ---
-    if request.method == 'POST':
+    # --- Lógica de Acción por Lote (POST) ---
+    if request.method == 'POST' and 'action' in request.POST and request.POST['action'] == 'enviar_correo':
         cliente_ids = request.POST.getlist('cliente_seleccionado')
         asunto = request.POST.get('asunto_correo')
         mensaje = request.POST.get('mensaje_correo')
-        
-        if cliente_ids:
-            clientes_seleccionados = Cliente.objects.filter(id__in=cliente_ids)
-            destinatarios = [c.email for c in clientes_seleccionados]
-            
-            num_enviados = len(destinatarios)
 
-            if asunto and mensaje:
+        if not cliente_ids:
+            messages.error(request, 'Error: No seleccionaste ningún cliente.')
+        elif not asunto or not mensaje:
+            messages.error(request, 'Error: Debe ingresar Asunto y Mensaje para enviar el correo.')
+        else:
+            clientes_seleccionados = Cliente.objects.filter(id__in=cliente_ids)
+            destinatarios = [c.email for c in clientes_seleccionados if c.email] # Asegurarse que tengan email
+            num_seleccionados = len(cliente_ids)
+            num_a_enviar = len(destinatarios)
+
+            if num_a_enviar > 0:
                 try:
-                    # 🚀 IMPLEMENTACIÓN REAL DE ENVÍO DE CORREO CORREGIDA
-                    # Se utiliza 'recipient_list=destinatarios' para asegurar la compatibilidad 
-                    # y se quita el argumento 'bcc' no soportado.
-                    
+                    # IMPLEMENTACIÓN REAL DE ENVÍO DE CORREO
+                    mensaje_completo = f"Mensaje: {mensaje}\n\n(Nota: Este correo fue enviado a un grupo de {num_a_enviar} destinatarios.)\n"
                     send_mail(
                         subject=asunto,
-                        # Es buena práctica incluir el número de envíos en el mensaje para trazabilidad.
-                        message=f"Mensaje: {mensaje}\n\n(Nota: Este correo fue enviado a un total de {num_enviados} destinatarios.)\n",
+                        message=mensaje_completo,
                         from_email=settings.DEFAULT_FROM_EMAIL,
-                        # Se usa recipient_list para enviar el correo a todos los destinatarios
-                        recipient_list=destinatarios, 
+                        recipient_list=destinatarios,
                         fail_silently=False,
                     )
-                    
-                    messages.success(request, f'¡Correo enviado con éxito! Se envió a {num_enviados} clientes con el asunto: "{asunto}".')
-
+                    messages.success(request, f'¡Correo simulado enviado con éxito! Se envió a {num_a_enviar} de {num_seleccionados} clientes seleccionados con el asunto: "{asunto}". Revisa la consola si usas EmailBackend.')
+                except BadHeaderError:
+                    messages.error(request, 'Error: Asunto inválido, contiene saltos de línea.')
                 except Exception as e:
-                    # Si falla, te mostrará el error en la consola
+                    # Captura otros errores de envío (ej. de conexión SMTP si estuviera configurado)
                     messages.error(request, f'Error al intentar enviar el correo: {e}')
             else:
-                messages.error(request, 'Error: Debe ingresar Asunto y Mensaje para enviar el correo.')
-        
-        # Redirigir para mantener los filtros activos
+                 messages.warning(request, f'Se seleccionaron {num_seleccionados} clientes, pero ninguno tenía una dirección de correo válida registrada.')
+
+        # Redirigir siempre después de un POST para evitar reenvíos, manteniendo los filtros GET
         url_params = request.GET.urlencode()
         return redirect(f'{request.path}?{url_params}')
 
-
-    # Obtenemos datos para el Contexto (Lógica GET)
+    # --- Contexto para la plantilla (GET) ---
     todos_intereses = Interes.objects.all().order_by('nombre')
-    
     talleres_futuros = Taller.objects.filter(
-        esta_activo=True, 
+        esta_activo=True,
         fecha_taller__gte=timezone.now().date()
     ).order_by('fecha_taller')
 
@@ -391,7 +372,7 @@ def listado_clientes(request):
         'titulo': 'Listado de Clientes CRM',
         'clientes': clientes,
         'todos_intereses': todos_intereses,
-        'intereses_activos': [int(i) for i in intereses_filtro if i.isdigit()] if intereses_filtro else [], 
+        'intereses_activos': [int(i) for i in intereses_filtro if i.isdigit()],
         'talleres_futuros': talleres_futuros,
         'taller_asistir_activo': int(taller_asistir_filtro) if taller_asistir_filtro and taller_asistir_filtro.isdigit() else None,
     }
@@ -638,8 +619,7 @@ def ver_carrito(request):
     }
     return render(request, 'crm/carrito.html', context)
 
-
-@transaction.atomic
+@transaction.atomic # --- Mantenemos la transacción atómica ---
 def finalizar_compra(request):
     """Procesa el pago y registra la venta y detalles. REQUIERE AUTENTICACIÓN."""
     if not request.user.is_authenticated:
@@ -651,7 +631,7 @@ def finalizar_compra(request):
         messages.error(request, 'El carrito está vacío.')
         return redirect('ver_carrito')
 
-    # 1. Obtener el cliente (o crearlo si solo existe el usuario Django)
+    # 1. Obtener el cliente
     try:
         cliente = Cliente.objects.get(email=request.user.email)
     except Cliente.DoesNotExist:
@@ -660,26 +640,48 @@ def finalizar_compra(request):
             defaults={'nombre_completo': request.user.get_full_name() or request.user.username}
         )
 
-    subtotal_general = Decimal(0)
-    
-    # 2. Registrar la Venta (VentaProducto)
-    # Creamos la venta primero con monto 0, se actualizará al final
+    # --- NUEVO: PASO 2 - VALIDACIÓN DE STOCK ANTES DE COBRAR ---
+    # Revisamos todo el carrito antes de tocar la base de datos
+    for id_str, data in carrito_data.items():
+        try:
+            producto = Producto.objects.get(pk=int(id_str))
+            cantidad_solicitada = data['cantidad']
+            
+            # Comparamos con el stock_actual del modelo Producto
+            if producto.stock_actual < cantidad_solicitada:
+                messages.error(request, f'¡Stock insuficiente! Solo quedan {producto.stock_actual} unidades de "{producto.nombre}".')
+                return redirect('ver_carrito')
+        except Producto.DoesNotExist:
+            messages.error(request, f'El producto con ID {id_str} ya no existe.')
+            # (Opcional: eliminarlo del carrito aquí)
+            return redirect('ver_carrito')
+    # --- FIN DE LA VALIDACIÓN ---
+
+
+    # 3. Registrar la Venta (VentaProducto)
+    # (El código anterior se mueve del paso 2 al 3)
     venta = VentaProducto.objects.create(
         cliente=cliente,
         monto_total=Decimal(0), 
-        estado_pago='PENDIENTE' # Asumimos que el pago es pendiente hasta confirmación (simulada)
+        estado_pago='PENDIENTE' 
     )
 
-    # 3. Registrar Detalles y Actualizar Stock (y calcular monto total)
+    subtotal_general = Decimal(0)
+    
+    # 4. Registrar Detalles y Actualizar Stock
     for id_str, data in carrito_data.items():
+        # Volvemos a obtener el producto (dentro de la transacción)
         producto = get_object_or_404(Producto, pk=int(id_str))
         cantidad = data['cantidad']
         precio_unitario = Decimal(data['precio'])
         subtotal = precio_unitario * Decimal(cantidad)
         subtotal_general += subtotal
 
-        # Nota: Aquí se DEBERÍA restar stock, pero no tenemos el campo stock_actual aún.
-        # Asumimos que el stock es ilimitado por ahora.
+        # --- MODIFICADO: Actualizar Stock Atómicamente ---
+        # Usamos F() para evitar condiciones de carrera (race conditions)
+        producto.stock_actual = F('stock_actual') - cantidad
+        producto.save(update_fields=['stock_actual']) 
+        # --------------------------------------------------
 
         DetalleVenta.objects.create(
             venta=venta,
@@ -688,20 +690,17 @@ def finalizar_compra(request):
             precio_unitario=precio_unitario,
         )
 
-    # 4. Actualizar Monto Total y marcar como PAGADO (Simulación de pago finalizado)
+    # 5. Actualizar Monto Total y marcar como PAGADO (Simulación)
     venta.monto_total = subtotal_general
-    venta.estado_pago = 'PAGADO' # Simulación: Pago se realiza en este paso
+    venta.estado_pago = 'PAGADO' 
     venta.save()
     
-    # 5. Limpiar Carrito y Mensaje
+    # 6. Limpiar Carrito y Mensaje
     del request.session['carrito']
     request.session.modified = True
     
     messages.success(request, f'¡Compra finalizada y pagada con éxito! Total: ${venta.monto_total} CLP.')
     return redirect('home')
-
-
-# ... (resto de funciones) ...
 
 # Modificar Detalle Producto para permitir agregar al carrito
 def detalle_producto(request, producto_id):
@@ -716,3 +715,9 @@ def detalle_producto(request, producto_id):
     }
     # NOTA: La plantilla tendrá el botón para agregar al carrito
     return render(request, 'crm/detalle_producto.html', context)
+
+def logout(request):
+    """Cierra la sesión del usuario y redirige a la página de inicio."""
+    auth_logout(request)
+    messages.info(request, 'Has cerrado sesión exitosamente.')
+    return redirect('home')

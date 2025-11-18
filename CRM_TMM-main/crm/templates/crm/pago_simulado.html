@@ -17,12 +17,12 @@
   }
 
   .tmm-page {
-    min-height: 100vh;
+    /* min-height: 100vh; */ /* Quitado para que no ocupe toda la pantalla si el contenido es corto */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 8vh;
+    padding-top: 5vh; /* Un poco menos de espacio arriba */
     color: #1f2937;
   }
 
@@ -33,7 +33,7 @@
     border: 1px solid #fde2e8;
     padding: 40px 35px;
     max-width: 600px;
-    width: 100%;
+    width: 90%; /* Ajustado para mejor responsividad */
     margin: 30px auto;
   }
 
@@ -64,16 +64,22 @@
   .tmm-btn {
     width: 100%;
     padding: 14px;
-    background: var(--tmm-pink);
+    background: #4CAF50; /* Verde para pago exitoso */
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
     font-size: 1.1em;
     font-weight: 600;
-    box-shadow: 0 4px 16px rgba(214,51,132,0.25);
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25);
     transition: transform 0.08s ease, filter 0.1s ease;
-    margin-top: 25px;
+    margin-top: 15px; /* Reducido espacio */
+  }
+   /* Botón para simular fallo */
+  .tmm-btn-fail {
+      background: #f44336; /* Rojo para fallo */
+      box-shadow: 0 4px 16px rgba(244, 67, 54, 0.25);
+      margin-top: 10px;
   }
 
   .tmm-btn:hover { filter: brightness(.97); }
@@ -81,10 +87,14 @@
 
   .tmm-status {
     font-weight: bold;
-    color: orange;
+    color: orange; /* Mantenemos naranja para pendiente/abonado */
+  }
+  .tmm-status-paid {
+      color: green; /* Verde si ya está pagado */
   }
 
-  .tmm-paid {
+
+  .tmm-paid-message { /* Renombrado de tmm-paid */
     color: green;
     font-weight: bold;
     text-align: center;
@@ -103,32 +113,70 @@
   .tmm-link:hover {
     text-decoration: underline;
   }
+
+  /* Mensajes de Django */
+    .tmm-msg {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        max-width: 600px;
+        width: 90%;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+    }
+    .tmm-msg.success { background-color: #e7f8ed; color: #155724; border: 1px solid #c3e6cb; }
+    .tmm-msg.error { background-color: #fde2e8; color: #a61e4d; border: 1px solid #f3c2cd; }
+    .tmm-msg.warning { background-color: #fff8e1; color: #856404; border: 1px solid #ffecb3; }
+    .tmm-msg.info { background-color: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
+
 </style>
 
 <div class="tmm-page">
   <h1>Proceso de Pago — {{ inscripcion.taller.nombre }}</h1>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="tmm-msg {{ message.tags }}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
 
   <div class="tmm-card">
     <h2>Resumen de Inscripción</h2>
 
     <p><strong>Cliente:</strong> {{ inscripcion.cliente.nombre_completo }} ({{ inscripcion.cliente.email }})</p>
     <p><strong>Monto a Pagar:</strong> <span class="tmm-highlight">${{ inscripcion.taller.precio|intcomma }} CLP</span></p>
-    <p><strong>Estado Actual:</strong> <span class="tmm-status">{{ inscripcion.get_estado_pago_display }}</span></p>
+    <p>
+        <strong>Estado Actual:</strong>
+        <span class="{% if inscripcion.estado_pago == 'PAGADO' %}tmm-status-paid{% else %}tmm-status{% endif %}">
+            {{ inscripcion.get_estado_pago_display }}
+        </span>
+        {% if inscripcion.monto_pagado > 0 and inscripcion.estado_pago != 'PAGADO' %}
+            (Abonado: ${{ inscripcion.monto_pagado|intcomma }})
+        {% endif %}
+    </p>
+
 
     <hr style="margin: 20px 0; border: none; border-top: 1px solid #f3c2cd;">
 
-    <p style="text-align:center;">Esta es una simulación del <strong>Sistema de Pago en Línea</strong> (Requisito Must Have).</p>
-    <p style="text-align:center;">Al hacer clic en el botón, el estado de la <strong>Inscripción</strong> cambiará de <strong>Pendiente</strong> a <strong>Pagado Completo</strong>, asegurando tu cupo.</p>
+    {% if inscripcion.estado_pago != 'PAGADO' %}
+      <p style="text-align:center;">Esta es una simulación del <strong>Sistema de Pago en Línea</strong>.</p>
+      <p style="text-align:center;">Al hacer clic en el botón "Simular Pago Exitoso", el estado de la <strong>Inscripción</strong> cambiará a <strong>Pagado Completo</strong>.</p>
 
-    {% if inscripcion.estado_pago == 'PENDIENTE' %}
       <form method="POST">
         {% csrf_token %}
-        <button type="submit" class="tmm-btn">
-          Simular Pago con Tarjeta (¡Asegura tu Cupo!)
+        <button type="submit" name="accion_pago" value="pagar" class="tmm-btn">
+          ✅ Simular Pago Exitoso (Asegura tu Cupo)
+        </button>
+        <button type="submit" name="accion_pago" value="fallar" class="tmm-btn tmm-btn-fail">
+          ❌ Simular Pago Fallido
         </button>
       </form>
     {% else %}
-      <p class="tmm-paid">✅ ¡Este taller ya está pagado!</p>
+      <p class="tmm-paid-message">✅ ¡Este taller ya está pagado!</p>
     {% endif %}
 
     <a href="{% url 'catalogo_talleres' %}" class="tmm-link">← Volver al Catálogo</a>

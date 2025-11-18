@@ -23,7 +23,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('crm.urls')),
     path('', include('django.contrib.auth.urls')),
-     path('', include('django.contrib.auth.urls'))
 ]
 
 if settings.DEBUG:

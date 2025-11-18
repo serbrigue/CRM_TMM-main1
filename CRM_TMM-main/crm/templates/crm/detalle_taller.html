@@ -219,6 +219,11 @@
             <input type="email" id="email" name="email" class="tmm-input" required>
           </div>
 
+          <div class="tmm-field">
+            <label for="telefono">Teléfono (ej. +569XXXXXXXX):</label>
+            <input type="tel" id="telefono" name="telefono" class="tmm-input" required pattern="^\+?[0-9\s\-()]{7,20}$" title="Incluye prefijo internacional, sólo números y símbolos + - ( )" />
+          </div>
+
           <button type="submit" class="tmm-btn">¡Inscribirme y Reservar!</button>
         </form>
       {% endif %}

@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .api.views import EnrollTallerAPIView
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -17,5 +18,6 @@ urlpatterns = [
     path('carrito/', views.ver_carrito, name='ver_carrito'),
     path('carrito/add/<int:producto_id>/', views.agregar_a_carrito, name='agregar_a_carrito'),
     path('carrito/update/', views.actualizar_carrito, name='actualizar_carrito'),
-    path('carrito/checkout/', views.finalizar_compra, name='finalizar_compra'), 
+    path('carrito/checkout/', views.finalizar_compra, name='finalizar_compra'),
+    path('logout/', views.logout, name='logout'),
 ]
