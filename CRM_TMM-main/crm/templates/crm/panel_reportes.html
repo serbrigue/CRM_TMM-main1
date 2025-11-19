@@ -18,6 +18,12 @@
         </div>
     </div>
     
+    <!-- DEBUG: mostrar datos del gráfico (temporal) -->
+    <div style="background:#fff8e1;padding:10px;border:1px solid #ffe082;margin:10px 0;">
+        <strong>DEBUG - ingresos_labels:</strong> {{ ingresos_labels }}<br/>
+        <strong>DEBUG - ingresos_data:</strong> {{ ingresos_data }}
+    </div>
+    
     <hr>
     
     {{ ingresos_labels|json_script:"ingresos-labels-data" }}

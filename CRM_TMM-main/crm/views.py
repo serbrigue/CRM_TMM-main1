@@ -6,6 +6,10 @@ from django.db import IntegrityError
 from .models import Taller, Cliente, Inscripcion, Producto, Interes, DetalleVenta, VentaProducto # Asegúrate de importar los modelos de Venta
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models.functions import TruncMonth
+from django.db.models import Min, Max
+import logging
+import json
+import math
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
 from .forms import RegistroClienteForm
@@ -13,12 +17,16 @@ from .utils.enrollment import enroll_cliente_en_taller
 from django.utils import timezone
 from django.core.mail import send_mail, BadHeaderError # Importa BadHeaderError
 from django.conf import settings
-from decimal import Decimal
+from django.urls import reverse
+from django.template.loader import render_to_string
+from django.http import HttpResponse, JsonResponse
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 import calendar
 import datetime
 from datetime import date
 from django.contrib.auth.views import LoginView as DjangoLoginView
+from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.contrib.auth import logout as auth_logout
 
@@ -135,6 +143,21 @@ def registro_cliente(request):
         if form.is_valid():
             usuario = form.save()
             login(request, usuario)
+            # Enviar correo de bienvenida usando las plantillas
+            try:
+                from .utils.email import send_email as send_email_util
+                ctx = {
+                    'nombre_cliente': usuario.get_full_name() or usuario.username,
+                    'email': usuario.email,
+                    'profile_url': request.build_absolute_uri(reverse('detalle_cliente_admin', args=[usuario.id])) if request.user.is_authenticated else request.build_absolute_uri('/')
+                }
+                text_body = render_to_string('emails/welcome.txt', ctx)
+                html_body = render_to_string('emails/welcome.html', ctx)
+                sender_name = request.user.get_full_name() or request.user.username if request.user.is_authenticated else None
+                send_email_util(recipient=usuario.email, subject='Bienvenida a TMM', text_body=text_body, html_body=html_body, inscripcion=None, sender_name=sender_name)
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.exception('Error enviando email de bienvenida: %s', e)
             messages.success(request, '¡Registro exitoso! Bienvenido(a) a TMM.')
             return redirect('home')
         else:
@@ -145,8 +168,53 @@ def registro_cliente(request):
     context = {
         'titulo': 'Registro de Cliente',
         'form': form,
+        'password_requirements': (
+            'La contraseña debe tener al menos 8 caracteres, incluir una letra mayúscula, '
+            'una letra minúscula y un número.'
+        ),
     }
     return render(request, 'crm/registro_cliente.html', context)
+
+
+class CustomLoginView(DjangoLoginView):
+    """Custom LoginView que mejora la retroalimentación en fallos de inicio de sesión.
+
+    Diferencia entre usuario inexistente y contraseña incorrecta y añade
+    un error no relacionado al formulario para mostrar en la plantilla.
+    """
+    template_name = 'registration/login.html'
+
+    def form_invalid(self, form):
+        # Extraer el valor del campo username tal como llegó en el POST
+        username_field = form.fields.get('username') if hasattr(form, 'fields') else None
+        username = self.request.POST.get('username', '').strip()
+
+        User = get_user_model()
+        if username:
+            try:
+                User.objects.get(username=username)
+                # Usuario existe -> error de contraseña
+                form.add_error(None, 'Contraseña incorrecta para este usuario.')
+            except User.DoesNotExist:
+                # Usuario no existe
+                form.add_error(None, 'El usuario no existe. Verifica el nombre de usuario o regístrate.')
+        else:
+            form.add_error(None, 'Debes ingresar tu nombre de usuario.')
+
+        return super().form_invalid(form)
+
+    def get(self, request, *args, **kwargs):
+        # Consumir (leer) los mensajes previos para que no se muestren en la página de login
+        # esto evita que mensajes generados en otras vistas (inscripción, pago, etc.) aparezcan aquí.
+        try:
+            list(messages.get_messages(request))
+        except Exception:
+            # Si por algún motivo la lectura falla, no bloqueamos el acceso al login
+            pass
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(**kwargs)
 
 
 
@@ -169,14 +237,109 @@ def gestion_deudores(request):
     
     # 2. Iniciar el QuerySet con todas las inscripciones (para el filtro 'Todos')
     inscripciones_qs = Inscripcion.objects.all().order_by('-fecha_inscripcion')
+
+    # --- Manejo de envío de recordatorios / cancelaciones por correo (desde la UI) ---
+    if request.method == 'POST' and request.POST.get('action') in ('enviar_recordatorio', 'enviar_cancelacion'):
+        action = request.POST.get('action')
+        ins_ids = request.POST.getlist('inscripcion_seleccionada')
+        asunto = request.POST.get('asunto_recordatorio', '').strip() or None
+        mensaje = request.POST.get('mensaje_recordatorio', '').strip() or None
+        template_key = request.POST.get('template_key', 'personalizado')
+        # If the client didn't provide a template_key (or left it as 'personalizado')
+        # but the action implies a specific template, prefer the action's template.
+        if (not template_key or template_key == 'personalizado') and action == 'enviar_recordatorio':
+            template_key = 'recordatorio'
+        if (not template_key or template_key == 'personalizado') and action == 'enviar_cancelacion':
+            template_key = 'cancelacion'
+
+        # Defaults según acción
+        if action == 'enviar_cancelacion':
+            if not asunto:
+                asunto = 'Cancelación de cupo - Taller TMM'
+            if not mensaje:
+                mensaje = 'Lamentamos informarte que tu cupo ha sido cancelado. Para más información, contacta al equipo.'
+        else:
+            # recordatorio
+            if not asunto:
+                asunto = 'Recordatorio de pago - Taller TMM'
+            if not mensaje:
+                mensaje = 'Te recordamos realizar el pago pendiente para confirmar tu cupo.'
+
+        if not ins_ids:
+            messages.error(request, 'Error: No seleccionaste ninguna inscripción.')
+        else:
+            inscripciones_sel = Inscripcion.objects.filter(id__in=ins_ids).select_related('cliente')
+            destinatarios = [ins.cliente.email for ins in inscripciones_sel if ins.cliente and ins.cliente.email]
+            num_seleccionados = len(ins_ids)
+            num_a_enviar = len(destinatarios)
+
+            if num_a_enviar > 0:
+                # Enviar correos individualizados para evitar exponer destinatarios y permitir personalización
+                successes = 0
+                failures = []
+                from .utils.email import send_email as send_email_util
+
+                # Sender name: use the current logged-in user's full name or username
+                sender_name = request.user.get_full_name() or request.user.username
+
+                for ins in inscripciones_sel:
+                    email = ins.cliente.email if ins.cliente else None
+                    if not email:
+                        failures.append((None, 'Sin email'))
+                        continue
+                    # Construir URL de pago (absoluta)
+                    try:
+                        pago_url = request.build_absolute_uri(reverse('pago_simulado', args=[ins.id]))
+                    except Exception:
+                        pago_url = f"/pago/{ins.id}/"
+                    # If a template was chosen, render templates with context; otherwise use the free-text message
+                    if template_key and template_key != 'personalizado':
+                        ctx = {
+                            'nombre_cliente': ins.cliente.nombre_completo if ins.cliente else '',
+                            'taller_nombre': ins.taller.nombre if ins.taller else '',
+                            'estado': ins.get_estado_pago_display(),
+                            'pago_url': pago_url,
+                        }
+                        try:
+                            text_body = render_to_string(f'emails/{template_key}.txt', ctx)
+                        except Exception:
+                            text_body = (mensaje or '').replace('[Nombre del Cliente]', ins.cliente.nombre_completo if ins.cliente else '')
+                        try:
+                            html_body = render_to_string(f'emails/{template_key}.html', ctx)
+                        except Exception:
+                            html_body = None
+                    else:
+                        cuerpo = mensaje or ''
+                        cuerpo = cuerpo.replace('[Nombre del Cliente]', ins.cliente.nombre_completo if ins.cliente else '')
+                        cuerpo = cuerpo.replace('[Taller]', ins.taller.nombre if ins.taller else '')
+                        cuerpo = cuerpo.replace('[Estado]', ins.get_estado_pago_display())
+                        cuerpo = cuerpo.replace('[Link de Pago Simulado]', pago_url)
+                        text_body = cuerpo
+                        html_body = None
+
+                    ok, err = send_email_util(recipient=email, subject=asunto, text_body=text_body, html_body=html_body, inscripcion=ins, sender_name=sender_name)
+                    if ok:
+                        successes += 1
+                    else:
+                        failures.append((email, err or 'Error desconocido'))
+
+                if successes:
+                    messages.success(request, f'Correos enviados correctamente: {successes} de {num_seleccionados} seleccionados.')
+                if failures:
+                    messages.error(request, f'Fallaron {len(failures)} envíos. Ejemplos: {failures[:3]}')
+            else:
+                messages.error(request, 'No se encontró correo electrónico en las inscripciones seleccionadas.')
+
+        # Tras POST redirigimos para evitar reenvío del formulario al refrescar
+        return redirect('gestion_deudores')
     
     # 3. Aplicar el filtro según el parámetro
-    # Se usa 'DEUDA' en lugar de 'PENDIENTE'
+    # 'DEUDA' debe mostrar inscripciones con estado PENDIENTE (pendientes de pago)
     if filtro_estado == 'DEUDA':
-        # Filtro de "Pendientes/Abonados" (los que tienen deuda)
-        inscripciones_qs = inscripciones_qs.filter(
-            Q(estado_pago='PENDIENTE') | Q(estado_pago='ABONADO')
-        )
+        inscripciones_qs = inscripciones_qs.filter(estado_pago='PENDIENTE')
+    # Nuevo filtro: mostrar inscripciones con pagos 'ABONADO' (parciales)
+    elif filtro_estado == 'ABONADO':
+        inscripciones_qs = inscripciones_qs.filter(estado_pago='ABONADO')
     # Se usa 'PAGADO' en lugar de 'COMPLETADO'
     elif filtro_estado == 'PAGADO':
         # Filtro de "Completados" (los que no tienen deuda). Usamos 'PAGADO' como estado final.
@@ -184,10 +347,52 @@ def gestion_deudores(request):
         
     # Si filtro_estado es None, se usa el .all() inicial.
 
+    # --- Agrupar inscripciones en lotes de 15 (índices)
+    PER_PAGE = 15
+    try:
+        indice = int(request.GET.get('indice', 1))
+    except Exception:
+        indice = 1
+    if indice < 1:
+        indice = 1
+
+    ins_list = list(inscripciones_qs)
+    total = len(ins_list)
+    num_batches = max(1, math.ceil(total / PER_PAGE))
+    # Ajustar indice si excede
+    if indice > num_batches:
+        indice = num_batches
+
+    start = (indice - 1) * PER_PAGE
+    end = start + PER_PAGE
+    current_batch = ins_list[start:end]
+
+    # Índices para mostrar en la interfaz (evitar cálculos en la plantilla)
+    if total == 0:
+        mostrando_inicio = 0
+        mostrando_fin = 0
+    else:
+        mostrando_inicio = start + 1
+        mostrando_fin = min(end, total)
+
+    # Metadatos de otros lotes
+    batch_meta = []
+    for i in range(1, num_batches + 1):
+        s = (i - 1) * PER_PAGE + 1
+        e = min(i * PER_PAGE, total)
+        count = e - s + 1 if total > 0 else 0
+        batch_meta.append({'indice': i, 'range': f'{s}-{e}', 'count': count})
+
     context = {
         'titulo': 'Gestión de Pagos CRM',
-        'deudores': inscripciones_qs, 
-        'estado_activo': filtro_estado, 
+        'deudores': current_batch,
+        'estado_activo': filtro_estado,
+        'indice_actual': indice,
+        'num_batches': num_batches,
+        'batch_meta': batch_meta,
+        'total_deudores': total,
+        'mostrando_inicio': mostrando_inicio,
+        'mostrando_fin': mostrando_fin,
     }
     return render(request, 'crm/gestion_deudores.html', context)
 
@@ -231,19 +436,65 @@ def panel_reportes(request):
     # -----------------------------------------------------------
 
     # 1. Ingresos por Mes (Gráfico de Líneas)
-    ingresos_mensuales = Inscripcion.objects.filter(
+    # Construimos un rango mensual continuo entre la fecha mínima y máxima.
+    # NOTA: usamos todas las inscripciones para determinar el rango temporal
+    # (para que meses sin pagos aparezcan en la serie con valor 0), pero
+    # calculamos los totales monetarios solo sobre inscripciones pagadas/abonadas.
+    ingresos_qs = Inscripcion.objects.filter(
         estado_pago__in=['PAGADO', 'ABONADO']
-    ).annotate(
-        mes_anio=TruncMonth('fecha_inscripcion')
-    ).values('mes_anio').annotate(
-        total_mes=Sum('monto_pagado')
-    ).order_by('mes_anio')
-    
-    # Formato para Chart.js
-    ingresos_labels = [
-        f"{item['mes_anio'].strftime('%b %Y')}" for item in ingresos_mensuales
-    ]
-    ingresos_data = [item['total_mes'] for item in ingresos_mensuales]
+    )
+
+    rango_qs = Inscripcion.objects.all()
+
+    # Obtener mínimo y máximo de fecha_inscripcion (basado en todas las inscripciones)
+    agg_dates = rango_qs.aggregate(min_date=Min('fecha_inscripcion'), max_date=Max('fecha_inscripcion'))
+    min_date = agg_dates.get('min_date')
+    max_date = agg_dates.get('max_date')
+
+    # Si no hay datos, usar el mes actual
+    if not min_date or not max_date:
+        now_dt = timezone.now().date()
+        min_date = max_date = now_dt
+
+    # Normalizar a primer día del mes
+    start_month = date(min_date.year, min_date.month, 1)
+    end_month = date(max_date.year, max_date.month, 1)
+
+    # Generar lista de meses entre start_month y end_month inclusive
+    months = []
+    cur = start_month
+    while cur <= end_month:
+        months.append(cur)
+        # avanzar un mes
+        if cur.month == 12:
+            cur = date(cur.year + 1, 1, 1)
+        else:
+            cur = date(cur.year, cur.month + 1, 1)
+
+    # Obtener totales por mes desde la BD
+    ingresos_mensuales = ingresos_qs.annotate(mes_anio=TruncMonth('fecha_inscripcion')).values('mes_anio').annotate(total_mes=Sum('monto_pagado'))
+    totals_map = {}
+    for item in ingresos_mensuales:
+        mes_dt = item['mes_anio']
+        # mes_dt puede ser datetime.date o datetime.datetime
+        mes_key = date(mes_dt.year, mes_dt.month, 1)
+        totals_map[mes_key] = item['total_mes'] or 0
+
+    # Rellenar la serie con 0 donde no hay datos
+    ingresos_labels = [m.strftime('%b %Y') for m in months]
+    ingresos_data = [float(totals_map.get(m, 0)) for m in months]
+
+    # Log para depuración: ver en logs del contenedor qué serie se está enviando
+    logger = logging.getLogger(__name__)
+    try:
+        logger.info('INGRESOS_SERIE labels=%s data=%s', json.dumps(ingresos_labels), json.dumps(ingresos_data))
+    except Exception:
+        logger.info('INGRESOS_SERIE no pudo serializar datos')
+    # Print directo para asegurar salida en logs del contenedor
+    try:
+        print('INGRESOS_SERIE', json.dumps(ingresos_labels), json.dumps(ingresos_data))
+    except Exception:
+        print('INGRESOS_SERIE: error al serializar datos')
 
     # 2. Inscripciones por Categoría (Gráfico de Dona)
     inscripciones_por_categoria = Inscripcion.objects.filter(
@@ -326,10 +577,12 @@ def listado_clientes(request):
         cliente_ids = request.POST.getlist('cliente_seleccionado')
         asunto = request.POST.get('asunto_correo')
         mensaje = request.POST.get('mensaje_correo')
+        template_key = request.POST.get('template_key', 'personalizado')
 
+        # If template is selected, allow empty mensaje (we'll render the template server-side).
         if not cliente_ids:
             messages.error(request, 'Error: No seleccionaste ningún cliente.')
-        elif not asunto or not mensaje:
+        elif template_key == 'personalizado' and (not asunto or not mensaje):
             messages.error(request, 'Error: Debe ingresar Asunto y Mensaje para enviar el correo.')
         else:
             clientes_seleccionados = Cliente.objects.filter(id__in=cliente_ids)
@@ -338,22 +591,63 @@ def listado_clientes(request):
             num_a_enviar = len(destinatarios)
 
             if num_a_enviar > 0:
-                try:
-                    # IMPLEMENTACIÓN REAL DE ENVÍO DE CORREO
-                    mensaje_completo = f"Mensaje: {mensaje}\n\n(Nota: Este correo fue enviado a un grupo de {num_a_enviar} destinatarios.)\n"
-                    send_mail(
-                        subject=asunto,
-                        message=mensaje_completo,
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=destinatarios,
-                        fail_silently=False,
-                    )
-                    messages.success(request, f'¡Correo simulado enviado con éxito! Se envió a {num_a_enviar} de {num_seleccionados} clientes seleccionados con el asunto: "{asunto}". Revisa la consola si usas EmailBackend.')
-                except BadHeaderError:
-                    messages.error(request, 'Error: Asunto inválido, contiene saltos de línea.')
-                except Exception as e:
-                    # Captura otros errores de envío (ej. de conexión SMTP si estuviera configurado)
-                    messages.error(request, f'Error al intentar enviar el correo: {e}')
+                from .utils.email import send_email as send_email_util
+
+                # Determine sender name (use currently logged-in user's full name or username)
+                sender_name = request.user.get_full_name() or request.user.username
+
+                successes = 0
+                failures = []
+
+                # Prepare filter-based placeholders: if a taller or intereses filter is active, compute their readable values
+                intereses_names = []
+                if intereses_filtro:
+                    intereses_qs = Interes.objects.filter(id__in=[int(i) for i in intereses_filtro if i.isdigit()])
+                    intereses_names = [i.nombre for i in intereses_qs]
+
+                taller_name = None
+                if taller_asistir_filtro and taller_asistir_filtro.isdigit():
+                    try:
+                        t = Taller.objects.get(id=int(taller_asistir_filtro))
+                        taller_name = t.nombre
+                    except Taller.DoesNotExist:
+                        taller_name = None
+
+                for c in clientes_seleccionados:
+                    email = c.email
+                    if not email:
+                        failures.append((None, 'Sin email'))
+                        continue
+                    # Determine message bodies based on template selection
+                    if template_key != 'personalizado':
+                        # render templates with context
+                        ctx = {
+                            'nombre_cliente': c.nombre_completo or '',
+                            'taller_nombre': taller_name or '',
+                            'intereses': intereses_names,
+                            'estado': '',
+                            'pago_url': request.build_absolute_uri('/')
+                        }
+                        text_body = render_to_string(f'emails/{template_key}.txt', ctx)
+                        html_body = render_to_string(f'emails/{template_key}.html', ctx)
+                    else:
+                        text_body = (mensaje or '').replace('[Nombre del Cliente]', c.nombre_completo or '')
+                        if '[Intereses]' in text_body and intereses_names:
+                            text_body = text_body.replace('[Intereses]', ', '.join(intereses_names))
+                        if '[Taller]' in text_body and taller_name:
+                            text_body = text_body.replace('[Taller]', taller_name)
+                        html_body = None
+
+                    ok, err = send_email_util(recipient=email, subject=asunto, text_body=text_body, html_body=html_body, inscripcion=None, sender_name=sender_name)
+                    if ok:
+                        successes += 1
+                    else:
+                        failures.append((email, err or 'Error desconocido'))
+
+                if successes:
+                    messages.success(request, f'Correos enviados correctamente: {successes} de {num_seleccionados} seleccionados.')
+                if failures:
+                    messages.error(request, f'Fallaron {len(failures)} envíos. Ejemplos: {failures[:3]}')
             else:
                  messages.warning(request, f'Se seleccionaron {num_seleccionados} clientes, pero ninguno tenía una dirección de correo válida registrada.')
 
@@ -398,6 +692,43 @@ def detalle_cliente_admin(request, cliente_id):
         # Aquí se podrían agregar las notas de seguimiento en un paso posterior
     }
     return render(request, 'crm/detalle_cliente_admin.html', context)
+
+
+@user_passes_test(is_superuser)
+def email_preview(request):
+    """Render a preview of an email template for AJAX requests.
+
+    Expects POST with: template_key, sample_name, sample_taller_id (optional)
+    Returns rendered HTML snippet.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    template_key = request.POST.get('template_key')
+    sample_name = request.POST.get('sample_name', 'Cliente Ejemplo')
+    sample_taller_id = request.POST.get('sample_taller_id')
+
+    taller_nombre = ''
+    if sample_taller_id and sample_taller_id.isdigit():
+        try:
+            taller = Taller.objects.get(id=int(sample_taller_id))
+            taller_nombre = taller.nombre
+        except Taller.DoesNotExist:
+            taller_nombre = ''
+
+    ctx = {
+        'nombre_cliente': sample_name,
+        'taller_nombre': taller_nombre,
+        'estado': 'Pago Pendiente',
+        'pago_url': request.build_absolute_uri('/')
+    }
+
+    try:
+        html = render_to_string(f'emails/{template_key}.html', ctx)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+    return HttpResponse(html)
 
 def catalogo_productos(request):
     """
@@ -590,15 +921,17 @@ def ver_carrito(request):
     items = []
     subtotal_general = Decimal(0)
     
-    for id_str, data in carrito_data.items():
+    # Iterar sobre una copia de los items para evitar modificar el dict durante la iteración
+    keys_to_remove = []
+    for id_str, data in list(carrito_data.items()):
         try:
             producto = Producto.objects.get(pk=int(id_str))
-            cantidad = data['cantidad']
+            cantidad = int(data.get('cantidad', 0))
             # Convertir el precio de str a Decimal para el cálculo
-            precio = Decimal(data['precio']) 
+            precio = Decimal(str(data.get('precio', '0'))) 
             subtotal = precio * Decimal(cantidad)
             subtotal_general += subtotal
-            
+
             items.append({
                 'producto': producto,
                 'cantidad': cantidad,
@@ -606,9 +939,17 @@ def ver_carrito(request):
                 'subtotal': subtotal,
             })
         except Producto.DoesNotExist:
-            # Si el producto ya no existe, lo eliminamos del carrito
-            del carrito_data[id_str]
-            guardar_carrito(request, carrito_data)
+            # Si el producto ya no existe, marcar para eliminarlo después
+            keys_to_remove.append(id_str)
+        except (ValueError, InvalidOperation):
+            # Datos corruptos en sesión; marcar para eliminación
+            keys_to_remove.append(id_str)
+
+    # Eliminar las claves inválidas fuera del bucle de iteración y guardar sólo si hubo cambios
+    if keys_to_remove:
+        for k in keys_to_remove:
+            carrito_data.pop(k, None)
+        guardar_carrito(request, carrito_data)
             
     context = {
         'titulo': 'Mi Carrito de Compras',

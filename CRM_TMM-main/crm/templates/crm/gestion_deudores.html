@@ -5,6 +5,15 @@
     <h1>Gestión de Inscripciones y Pagos (CRM Administradora)</h1>
     <p>Lista de todas las clientas con inscripciones en cualquier estado de pago para el seguimiento de ventas.</p>
 
+    <style>
+        /* Dropdown styles (copiado de listado_clientes para comportamiento consistente) */
+        .action-dropdown { position: relative; display: inline-block; }
+        .dropdown-content { display: none; position: absolute; background-color: #f9f9f9; min-width: 180px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 10; border-radius: 6px; }
+        .dropdown-content button { color: #333; padding: 10px 16px; text-decoration: none; display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-size: 0.95rem; }
+        .dropdown-content button:hover { background-color: #fdf2f8; color: #d63384; }
+        .show { display: block; }
+    </style>
+
     {# Obtenemos el valor del parámetro 'estado' de la URL #}
     {% with request.GET.estado as estado_activo %}
 
@@ -38,6 +47,19 @@
             </a>
         {% endif %}
 
+        {# 2b. Filtro 'ABONADO' (pagos parciales) #}
+        {% if estado_activo == 'ABONADO' %}
+            <a href="{% url 'gestion_deudores' %}?estado=ABONADO"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: white; background-color: #e91e63; font-weight: bold;">
+                Pagos Abonados
+            </a>
+        {% else %}
+            <a href="{% url 'gestion_deudores' %}?estado=ABONADO"
+                style="margin-right: 10px; padding: 5px 10px; border: 1px solid #e91e63; border-radius: 4px; text-decoration: none; color: #e91e63; background-color: white;">
+                Pagos Abonados
+            </a>
+        {% endif %}
+
         {# 3. Filtro 'PAGADO' (anteriormente COMPLETADO) #}
         {% if estado_activo == 'PAGADO' %}
             <a href="{% url 'gestion_deudores' %}?estado=PAGADO"
@@ -53,48 +75,209 @@
 
     </div>
 
-    {% endwith %}
+    <div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin: 0;">Inscripciones: {{ deudores|length }}</h3>
+        <div class="action-dropdown">
+            <button type="button" onclick="toggleDeudoresDropdown()" class="btn btn-register" style="background: #e91e63; padding: 10px 20px; font-weight: bold; color: white;">Acción (Lote) ▼</button>
+            <div id="actionDropdownDeudores" class="dropdown-content" style="right:0;">
+                <button type="button" onclick="openDeudoresModal('recordatorio')">🔔 Enviar Recordatorio de Pago</button>
+                <button type="button" onclick="openDeudoresModal('cancelacion')">❌ Enviar Cancelación de Cupo</button>
+            </div>
+        </div>
+    </div>
 
-    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-        <thead>
-            <tr style="background-color: #e91e63; color: white;">
-                <th style="padding: 10px; text-align: left;">Cliente</th>
-                <th style="padding: 10px; text-align: left;">Taller Inscrito</th>
-                <th style="padding: 10px; text-align: left;">Precio Total</th>
-                <th style="padding: 10px; text-align: left;">Monto Pagado</th>
-                <th style="padding: 10px; text-align: left;">Deuda</th>
-                <th style="padding: 10px; text-align: left;">Estado</th>
-                <th style="padding: 10px; text-align: left;">Fecha Inscripción</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for inscripcion in deudores %}
-                <tr style="border-bottom: 1px solid #ddd; background-color:
-                    {% if inscripcion.estado_pago == 'PENDIENTE' %}#ffebeb{% elif inscripcion.estado_pago == 'ABONADO' %}#fffde7{% else %}white{% endif %};">
-                    
-                    <td style="padding: 10px;">{{ inscripcion.cliente.nombre_completo }} <br><small>{{ inscripcion.cliente.email }}</small></td>
-                    <td style="padding: 10px;">{{ inscripcion.taller.nombre }}</td>
-                    <td style="padding: 10px;">${{ inscripcion.taller.precio|intcomma }}</td>
-                    <td style="padding: 10px;">${{ inscripcion.monto_pagado|intcomma }}</td>
-                    <td style="padding: 10px; font-weight: bold; color: #cc0000;">
-                        ${{ inscripcion.taller.precio|sub:inscripcion.monto_pagado|intcomma }}
-                    </td>
-                    <td style="padding: 10px;">
-                        <span style="font-weight: bold; color:
-                            {% if inscripcion.estado_pago == 'PENDIENTE' %}red
-                            {% elif inscripcion.estado_pago == 'ABONADO' %}orange
-                            {% elif inscripcion.estado_pago == 'PAGADO' %}green
-                            {% endif %};">
-                            {{ inscripcion.get_estado_pago_display }}
-                        </span>
-                    </td>
-                    <td style="padding: 10px;">{{ inscripcion.fecha_inscripcion|date:"d M Y H:i" }}</td>
+    <form method="post" id="deudoresForm" style="margin-bottom:20px;">
+        {% csrf_token %}
+        <input type="hidden" name="action" id="deudores_action" value="" />
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+                <tr style="background-color: #e91e63; color: white;">
+                    <th style="padding: 10px; text-align: left;"><input type="checkbox" id="select_all_deudores" /></th>
+                    <th style="padding: 10px; text-align: left;">Cliente</th>
+                    <th style="padding: 10px; text-align: left;">Taller Inscrito</th>
+                    <th style="padding: 10px; text-align: left;">Precio Total</th>
+                    <th style="padding: 10px; text-align: left;">Monto Pagado</th>
+                    <th style="padding: 10px; text-align: left;">Deuda</th>
+                    <th style="padding: 10px; text-align: left;">Estado</th>
+                    <th style="padding: 10px; text-align: left;">Fecha Inscripción</th>
                 </tr>
+            </thead>
+            <tbody>
+                {% for inscripcion in deudores %}
+                    <tr style="border-bottom: 1px solid #ddd; background-color:
+                        {% if inscripcion.estado_pago == 'PENDIENTE' %}#ffebeb{% elif inscripcion.estado_pago == 'ABONADO' %}#fffde7{% else %}white{% endif %};">
+                        <td style="padding:10px;"><input type="checkbox" name="inscripcion_seleccionada" value="{{ inscripcion.id }}" /></td>
+                        <td style="padding: 10px;">{{ inscripcion.cliente.nombre_completo }} <br><small>{{ inscripcion.cliente.email }}</small></td>
+                        <td style="padding: 10px;">{{ inscripcion.taller.nombre }}</td>
+                        <td style="padding: 10px;">${{ inscripcion.taller.precio|intcomma }}</td>
+                        <td style="padding: 10px;">${{ inscripcion.monto_pagado|intcomma }}</td>
+                        <td style="padding: 10px; font-weight: bold; color: #cc0000;">${{ inscripcion.taller.precio|sub:inscripcion.monto_pagado|intcomma }}</td>
+                        <td style="padding: 10px;"><span style="font-weight: bold; color:{% if inscripcion.estado_pago == 'PENDIENTE' %}red{% elif inscripcion.estado_pago == 'ABONADO' %}orange{% elif inscripcion.estado_pago == 'PAGADO' %}green{% endif %};">{{ inscripcion.get_estado_pago_display }}</span></td>
+                        <td style="padding: 10px;">{{ inscripcion.fecha_inscripcion|date:"d M Y H:i" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="8" style="padding: 20px; text-align: center;">No hay inscripciones con el estado de pago seleccionado.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+
+    {% endwith %}
+        {# Mostrar botones de índice dinámicos según batch_meta (cada batch = 15) #}
+        <div style="margin-top:20px; margin-bottom:20px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            {% for batch in batch_meta %}
+                {% if batch.indice == indice_actual %}
+                    <a href="{% url 'gestion_deudores' %}?indice={{ batch.indice }}{% if estado_activo %}&estado={{ estado_activo }}{% endif %}" style="padding:8px 12px; background:#c2185b; color:white; border-radius:6px; text-decoration:none;">{{ batch.indice }}</a>
+                {% else %}
+                    <a href="{% url 'gestion_deudores' %}?indice={{ batch.indice }}{% if estado_activo %}&estado={{ estado_activo }}{% endif %}" style="padding:8px 12px; background:#e91e63; color:white; border-radius:6px; text-decoration:none; opacity:0.95;">{{ batch.indice }}</a>
+                {% endif %}
             {% empty %}
-                <tr>
-                    <td colspan="7" style="padding: 20px; text-align: center;">No hay inscripciones con el estado de pago seleccionado.</td>
-                </tr>
+                <span style="color:#666;">No hay páginas disponibles.</span>
             {% endfor %}
-        </tbody>
-    </table>
+
+            <span style="color:#666; font-size:0.95em; margin-left:8px;">Mostrando {{ mostrando_inicio }} - {{ mostrando_fin }} de {{ total_deudores }}</span>
+        </div>
+
+    {# Modal para enviar correos desde la gestión de deudores #}
+    <div id="deudoresEmailModal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.4);">
+        <div class="modal-content" style="background:#fff; margin:8% auto; padding:20px; width:80%; max-width:600px; border-radius:8px;">
+            <span class="close-btn" style="float:right; font-size:28px; cursor:pointer;">&times;</span>
+            <h2 id="deudoresModalTitle">Enviar Correo</h2>
+            <p>Destinatarios seleccionados: <strong id="deudoresRecipientCount">0</strong></p>
+            <div style="margin-bottom:12px;"><label>Asunto:</label><input type="text" id="deudores_asunto" style="width:100%; padding:8px;" /></div>
+            <div style="margin-bottom:12px;"><label>Plantilla:</label>
+                <select id="deudores_template" style="width:100%; padding:8px; margin-top:6px;">
+                    <option value="personalizado">Personalizado (texto libre)</option>
+                    <option value="recordatorio">Recordatorio (plantilla)</option>
+                    <option value="cancelacion">Cancelación (plantilla)</option>
+                </select>
+            </div>
+            <div style="margin-bottom:12px;"><label>Mensaje (si usas "Personalizado"):</label><textarea id="deudores_mensaje" rows="6" style="width:100%; padding:8px;"></textarea></div>
+            <div style="margin-bottom:12px; display:flex; gap:8px;"><button id="deudoresPreviewBtn" style="background:#2196f3; color:white; padding:8px 12px; border:none; border-radius:4px;">Vista previa</button><small style="align-self:center;color:#666;">(Preview renderiza la plantilla seleccionada con datos de ejemplo)</small></div>
+            <div style="display:flex; gap:8px;">
+                <button id="deudoresSendBtn" style="background:#e91e63; color:white; padding:8px 12px; border:none; border-radius:4px;">Enviar</button>
+                <button id="deudoresCancelBtn" style="background:#ccc; color:#333; padding:8px 12px; border:none; border-radius:4px;">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dropdown for acciones
+        function toggleDeudoresDropdown(){
+            document.getElementById('actionDropdownDeudores').classList.toggle('show');
+        }
+
+        // Select all checkbox logic
+        document.addEventListener('DOMContentLoaded', function(){
+            const selectAll = document.getElementById('select_all_deudores');
+            const form = document.getElementById('deudoresForm');
+            selectAll && selectAll.addEventListener('change', function(){
+                form.querySelectorAll('input[name="inscripcion_seleccionada"]').forEach(cb=>cb.checked = selectAll.checked);
+            });
+        });
+
+        // Open modal with template type: 'recordatorio' or 'cancelacion'
+        function openDeudoresModal(type){
+            const form = document.getElementById('deudoresForm');
+            const checked = Array.from(form.querySelectorAll('input[name="inscripcion_seleccionada"]:checked'));
+            if(checked.length === 0){
+                alert('Debes seleccionar al menos una inscripción.');
+                return;
+            }
+            const modal = document.getElementById('deudoresEmailModal');
+            const title = document.getElementById('deudoresModalTitle');
+            const rc = document.getElementById('deudoresRecipientCount');
+            const asunto = document.getElementById('deudores_asunto');
+            const mensaje = document.getElementById('deudores_mensaje');
+            rc.textContent = checked.length;
+            if(type === 'recordatorio'){
+                title.textContent = 'Enviar Recordatorio de Pago';
+                asunto.value = '🔔 Recordatorio de Pago - Taller TMM';
+                mensaje.value = 'Hola,\n\nTe recordamos que tienes un pago pendiente para asegurar tu cupo. Por favor completa el pago lo antes posible.\n\nSaludos,\nEquipo TMM';
+                document.getElementById('deudores_action').value = 'enviar_recordatorio';
+            } else {
+                title.textContent = 'Enviar Cancelación de Cupo';
+                asunto.value = '⚠️ Cancelación de Cupo - Taller TMM';
+                mensaje.value = 'Hola,\n\nLamentamos informarte que tu cupo ha sido cancelado. Si crees que es un error o quieres más información, contáctanos.\n\nSaludos,\nEquipo TMM';
+                document.getElementById('deudores_action').value = 'enviar_cancelacion';
+            }
+            // Ensure the template selector matches the type chosen from the dropdown
+            const tpl = document.getElementById('deudores_template');
+            if(tpl) tpl.value = type;
+            modal.style.display = 'block';
+        }
+
+        // Modal buttons
+        document.addEventListener('click', function(e){
+            const modal = document.getElementById('deudoresEmailModal');
+            if(!modal) return;
+            if(e.target && e.target.classList && e.target.classList.contains('close-btn')){
+                modal.style.display = 'none';
+            }
+        });
+
+        document.getElementById('deudoresCancelBtn').addEventListener('click', function(){
+            document.getElementById('deudoresEmailModal').style.display = 'none';
+        });
+
+        // Send action: build a POST form and submit
+        document.getElementById('deudoresSendBtn').addEventListener('click', function(){
+            const modal = document.getElementById('deudoresEmailModal');
+            const form = document.getElementById('deudoresForm');
+            const asuntoVal = document.getElementById('deudores_asunto').value;
+            const mensajeVal = document.getElementById('deudores_mensaje').value;
+            const actionVal = document.getElementById('deudores_action').value;
+            const templateVal = document.getElementById('deudores_template').value;
+            const checked = Array.from(form.querySelectorAll('input[name="inscripcion_seleccionada"]:checked'));
+            if(checked.length === 0){ alert('No hay inscripciones seleccionadas.'); return; }
+
+            // Build temporary form
+            const postForm = document.createElement('form');
+            postForm.method = 'POST';
+            postForm.action = "{% url 'gestion_deudores' %}";
+
+            // CSRF token
+            const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+            if(csrfToken){
+                const ct = csrfToken.cloneNode(true);
+                postForm.appendChild(ct);
+            }
+
+            // action
+            const a = document.createElement('input'); a.type='hidden'; a.name='action'; a.value=actionVal; postForm.appendChild(a);
+            // asunto & mensaje
+            const as = document.createElement('input'); as.type='hidden'; as.name='asunto_recordatorio'; as.value=asuntoVal; postForm.appendChild(as);
+            const ms = document.createElement('input'); ms.type='hidden'; ms.name='mensaje_recordatorio'; ms.value=mensajeVal; postForm.appendChild(ms);
+            const tpl = document.createElement('input'); tpl.type='hidden'; tpl.name='template_key'; tpl.value=templateVal; postForm.appendChild(tpl);
+
+            // selected inscriptions
+            checked.forEach(cb=>{
+                const c = document.createElement('input'); c.type='hidden'; c.name='inscripcion_seleccionada'; c.value = cb.value; postForm.appendChild(c);
+            });
+
+            document.body.appendChild(postForm);
+            postForm.submit();
+        });
+
+        // Preview button (AJAX POST to preview endpoint)
+        document.getElementById('deudoresPreviewBtn').addEventListener('click', function(){
+            const tpl = document.getElementById('deudores_template').value;
+            const sampleName = 'Cliente Ejemplo';
+            const sampleTaller = '';
+            const csrf = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+
+            fetch('{% url "email_preview" %}', {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
+                body: new URLSearchParams({template_key: tpl, sample_name: sampleName, sample_taller_id: sampleTaller})
+            }).then(r=>r.text()).then(html=>{
+                const previewWin = window.open('', '_blank', 'width=700,height=600');
+                previewWin.document.write(html);
+                previewWin.document.close();
+            }).catch(err=>alert('Error al generar la vista previa: '+err));
+        });
+    </script>
 {% endblock content %}

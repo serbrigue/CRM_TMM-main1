@@ -203,3 +203,31 @@ class DetalleVenta(models.Model):
 
     def subtotal(self):
         return self.cantidad * self.precio_unitario
+
+
+# --- MODELO 8: EmailLog (Registra intentos de envío de correo) ---
+class EmailLog(models.Model):
+    """Registra intentos de envío de correos desde el sistema para trazabilidad.
+
+    Guarda destinatario, asunto, cuerpo (texto), cuerpo HTML opcional,
+    estado (SUCCESS/FAIL), mensaje de error y la inscripción relacionada si aplica.
+    """
+    STATUS_CHOICES = [
+        ('SUCCESS', 'Enviado'),
+        ('FAIL', 'Fallido'),
+    ]
+
+    recipient = models.EmailField(blank=True, null=True)
+    subject = models.CharField(max_length=255)
+    body_text = models.TextField(blank=True, null=True)
+    body_html = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SUCCESS')
+    error_message = models.TextField(blank=True, null=True)
+    inscripcion = models.ForeignKey('Inscripcion', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Email to {self.recipient} [{self.status}] at {self.created_at}"

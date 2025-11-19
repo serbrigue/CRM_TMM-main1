@@ -1,13 +1,14 @@
 from django.urls import path
 from . import views
-from .api.views import EnrollTallerAPIView
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('login/', views.CustomLoginView.as_view(), name='login'),
     path('talleres/', views.catalogo_talleres, name='catalogo_talleres'),
     path('talleres/<int:taller_id>/', views.detalle_taller_inscripcion, name='detalle_taller'), 
     path('pago/<int:inscripcion_id>/', views.pago_simulado, name='pago_simulado'),
     path('gestion/deudores/', views.gestion_deudores, name='gestion_deudores'),
+    path('gestion/email/preview/', views.email_preview, name='email_preview'),
     path('gestion/reportes/', views.panel_reportes, name='panel_reportes'),
     path('cuenta/registro/', views.registro_cliente, name='registro_cliente'),
     path('gestion/clientes/', views.listado_clientes, name='listado_clientes'),

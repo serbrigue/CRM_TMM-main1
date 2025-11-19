@@ -1,0 +1,8 @@
+Hola {{ nombre_cliente }},
+
+Lamentamos informarte que tu cupo para el taller "{{ taller_nombre }}" ha sido cancelado.
+
+Si crees que esto es un error, por favor contáctanos.
+
+Saludos,
+Equipo TMM

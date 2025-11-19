@@ -25,15 +25,13 @@ load_dotenv(BASE_DIR / '.env')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # Read from env, fallback to previous inline secret for local development only
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-q5r@=f0)ibrkf1@t0k6@17*f+7aixh7x+j2bf*wiq+@z&eft-#')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default_insecure_key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 # Hosts (comma-separated in env)
-ALLOWED_HOSTS = [h for h in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',') if h]
-
-
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1').split(',')
 # Application definition
 
 INSTALLED_APPS = [
@@ -63,7 +61,7 @@ ROOT_URLCONF = 'tmm_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+            'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -81,10 +79,16 @@ WSGI_APPLICATION = 'tmm_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Base de datos
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_NAME', 'mydjangodb'),
+        'USER': os.environ.get('POSTGRES_USER', 'mydjango_user'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'secure_password'),
+        # IMPORTANTE: El host es el nombre del servicio en docker-compose.yml
+        'HOST': os.environ.get('POSTGRES_HOST', 'db'), 
+        'PORT': '5432',
     }
 }
 
@@ -124,8 +128,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
+# Directorios donde Django buscará archivos estáticos en desarrollo
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
@@ -146,19 +151,28 @@ LOGIN_URL = '/login/'
 # Configuración para Manejo de Archivos (Imágenes)
 # Directorio donde se almacenarán los archivos subidos (ej. las imágenes de talleres)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# `STATIC_ROOT` debe ser distinto de los directorios listados en `STATICFILES_DIRS`.
+# Usamos `staticfiles` como destino de `collectstatic` en despliegue.
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Email / from (use console backend by default in dev)
 EMAIL_BACKEND = os.getenv('DJANGO_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 DEFAULT_FROM_EMAIL = os.getenv('DJANGO_DEFAULT_FROM_EMAIL', 'carolina@tmmbienestar.cl')
 
-# REST Framework + JWT (Simple JWT)
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    # Default permission class can be overridden per-view
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
-    ),
-}
+# SMTP configuration (only used when EMAIL_BACKEND is the SMTP backend)
+# Configure these in your .env and set DJANGO_EMAIL_BACKEND accordingly to
+# 'django.core.mail.backends.smtp.EmailBackend' to enable real SMTP sending.
+if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.example.com')
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+    EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+    # Prefer TLS; set EMAIL_USE_SSL to True to use SSL instead
+    EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
+    EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('1', 'true', 'yes')
+    EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
+
+    # Optional: allow using a different default from address for production
+    DEFAULT_FROM_EMAIL = os.getenv('DJANGO_DEFAULT_FROM_EMAIL', DEFAULT_FROM_EMAIL)
+

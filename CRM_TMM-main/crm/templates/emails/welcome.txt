@@ -1,0 +1,10 @@
+Hola {{ nombre_cliente }},
+
+¡Bienvenido(a) a TMM! Tu cuenta ha sido creada correctamente.
+
+Puedes iniciar sesión con tu correo: {{ email }}
+
+Visita tu perfil para actualizar tus datos: {{ profile_url }}
+
+Saludos,
+Equipo TMM

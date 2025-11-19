@@ -205,12 +205,9 @@
             <a href="{% url 'home' %}" class="nav-btn">Inicio</a>
             <a href="{% url 'catalogo_talleres' %}" class="nav-btn">Talleres</a>
             <a href="{% url 'catalogo_productos' %}" class="nav-btn">Kits y Productos</a>
-            
-            {# --- NUEVO BOTÓN DE CARRITO EN LA NAVEGACIÓN PRINCIPAL --- #}
             <a href="{% url 'ver_carrito' %}" class="btn btn-cart" title="Ver mi carrito">
                  🛒 Carrito
             </a>
-            {# -------------------------------------------------------- #}
         </nav>
         
         <div class="auth-actions">
@@ -230,7 +227,7 @@
                 <a href="{% url 'registro_cliente' %}" class="btn btn-register">Registrarse</a>
             {% endif %}
         </div>
-    </header>   |
+    </header>
     
     {% if user.is_superuser %}
     <nav class="nav-admin">

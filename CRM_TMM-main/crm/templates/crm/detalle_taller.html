@@ -144,13 +144,6 @@
   }
 </style>
 
-{% if messages %}
-  {% for message in messages %}
-    <div class="tmm-msg {% if message.tags %}{{ message.tags }}{% endif %}">
-      {{ message }}
-    </div>
-  {% endfor %}
-{% endif %}
 
 {% if taller.imagen %}
     <img src="{{ taller.imagen.url }}" alt="Imagen del Taller {{ taller.nombre }}" 

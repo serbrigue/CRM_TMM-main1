@@ -162,11 +162,74 @@
         </div>
       {% endfor %}
 
-      <button type="submit" class="tmm-btn">Registrar y Acceder</button>
+      {% if password_requirements %}
+        <div id="pw-requirements-reg" style="margin-bottom:12px; font-size:0.9rem; color:#374151; background:#fffaf0; padding:8px; border-radius:6px; border:1px solid #fde2e8;">
+          <strong>Requisitos de contraseña:</strong>
+          <div style="margin-top:6px;">{{ password_requirements }}</div>
+          <ul id="pw-checklist-reg" style="margin:8px 0 0 18px; padding:0; list-style:none; color:#6b7280;">
+            <li data-test="length">❌ Al menos 8 caracteres</li>
+            <li data-test="upper">❌ Una letra mayúscula</li>
+            <li data-test="lower">❌ Una letra minúscula</li>
+            <li data-test="digit">❌ Un número</li>
+            <li data-test="match">❌ Las contraseñas coinciden</li>
+          </ul>
+        </div>
+      {% endif %}
+
+      <button type="submit" class="tmm-btn" id="registerSubmit">Registrar y Acceder</button>
     </form>
 
     <a href="{% url 'login' %}" class="tmm-link">¿Ya tienes una cuenta? Inicia sesión aquí</a>
   </div>
 </div>
+<script>
+  (function(){
+    const pw1 = document.querySelector('input[name="password1"]');
+    const pw2 = document.querySelector('input[name="password2"]');
+    const submitBtn = document.getElementById('registerSubmit');
+    const checklist = document.getElementById('pw-checklist-reg');
+    if(!pw1 || !pw2 || !submitBtn || !checklist) return;
+
+    const items = {
+      length: checklist.querySelector('li[data-test="length"]'),
+      upper: checklist.querySelector('li[data-test="upper"]'),
+      lower: checklist.querySelector('li[data-test="lower"]'),
+      digit: checklist.querySelector('li[data-test="digit"]'),
+      match: checklist.querySelector('li[data-test="match"]'),
+    };
+
+    function validate(){
+      const v1 = pw1.value || '';
+      const v2 = pw2.value || '';
+      const ok = {
+        length: v1.length >= 8,
+        upper: /[A-Z]/.test(v1),
+        lower: /[a-z]/.test(v1),
+        digit: /[0-9]/.test(v1),
+        match: v1 !== '' && v1 === v2,
+      };
+
+      Object.keys(ok).forEach(k => {
+        const el = items[k];
+        if(!el) return;
+        if(ok[k]){
+          el.textContent = '✅ ' + el.textContent.replace(/^.\s*/, '').trim();
+          el.style.color = '#166534';
+        } else {
+          el.textContent = '❌ ' + el.textContent.replace(/^.\s*/, '').trim();
+          el.style.color = '#9f1239';
+        }
+      });
+
+      const all = Object.values(ok).every(Boolean);
+      submitBtn.disabled = !all;
+      submitBtn.style.opacity = submitBtn.disabled ? '0.6' : '1';
+    }
+
+    validate();
+    pw1.addEventListener('input', validate);
+    pw2.addEventListener('input', validate);
+  })();
+</script>
 {% endblock content %}
 

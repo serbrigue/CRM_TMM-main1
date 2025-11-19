@@ -185,15 +185,6 @@
 
     <h1>Directorio de Clientes y Fidelización</h1>
     <p>Todos los contactos registrados en el CRM (B2C y B2B) para seguimiento y segmentación.</p>
-
-    {% if messages %}
-        {% for message in messages %}
-            <div style="padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e5cb; border-radius: 4px; margin-bottom: 15px;">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
     {# CAMBIO CLAVE: Formulario de filtros usa el método GET #}
     <form method="GET" id="filterForm" action="{% url 'listado_clientes' %}">
         {% csrf_token %} 
@@ -333,7 +324,16 @@
             
             <div class="email-form-group">
                 <label for="mensaje_correo">Mensaje (Simulación de Cuerpo de Correo):</label>
+                <select id="template_select" style="width:100%; padding:8px; margin-bottom:8px;">
+                    <option value="personalizado">Personalizado (texto libre)</option>
+                    <option value="recordatorio">Recordatorio (plantilla)</option>
+                    <option value="cancelacion">Cancelación (plantilla)</option>
+                </select>
                 <textarea id="mensaje_correo" name="mensaje_correo" rows="5" required></textarea>
+                <div style="margin-top:8px; display:flex; gap:8px;">
+                    <button type="button" id="previewEmailBtn" class="btn" style="background:#2196f3; color:white; padding:8px 12px; border-radius:4px;">Vista previa</button>
+                    <small style="align-self:center;color:#666;">(Preview renderiza la plantilla seleccionada con datos de ejemplo)</small>
+                </div>
             </div>
             
             <button type="submit" id="submitEmailBtn" name="action" value="enviar_correo" class="btn btn-register" style="background: #2196f3; width: 100%;">
@@ -390,10 +390,25 @@
             const template = emailTemplates[templateKey];
             document.getElementById('asunto_correo').value = template.asunto;
             document.getElementById('mensaje_correo').value = template.mensaje;
+            // Set the template select to match the chosen template
+            const tplSel = document.getElementById('template_select');
+            if (tplSel) tplSel.value = templateKey;
             
             // Abrir el modal y cerrar el dropdown
             document.getElementById("actionDropdown").classList.remove("show");
             emailModal.style.display = 'block';
+        }
+
+        // When the template_select changes, update asunto/mensaje to the template defaults
+        const tplSelectElem = document.getElementById('template_select');
+        if (tplSelectElem) {
+            tplSelectElem.addEventListener('change', function(){
+                const v = this.value;
+                const t = emailTemplates[v] || {'asunto':'','mensaje':''};
+                // Only overwrite if template has defaults (avoid overwriting bespoke edits when switching back to personalizado)
+                document.getElementById('asunto_correo').value = t.asunto || '';
+                document.getElementById('mensaje_correo').value = t.mensaje || '';
+            });
         }
 
         // FUNCIÓN CLAVE PARA CORREGIR EL 404: Crea un formulario POST temporal
@@ -421,6 +436,11 @@
             // 3. Añadir campos del modal (asunto, mensaje, y el identificador de acción)
             postForm.appendChild(document.getElementById('asunto_correo').cloneNode(true));
             postForm.appendChild(document.getElementById('mensaje_correo').cloneNode(true));
+            // Añadir la plantilla seleccionada si existe
+            const tpl = document.getElementById('template_select');
+            if (tpl) {
+                const tplInput = document.createElement('input'); tplInput.type = 'hidden'; tplInput.name = 'template_key'; tplInput.value = tpl.value; postForm.appendChild(tplInput);
+            }
 
             const actionInput = document.createElement('input');
             actionInput.type = 'hidden';
@@ -436,6 +456,24 @@
             // 5. Enviar el formulario POST
             document.body.appendChild(postForm);
             postForm.submit();
+        });
+
+        // Preview button - opens rendered template in a new window
+        document.getElementById('previewEmailBtn').addEventListener('click', function(){
+            const tpl = document.getElementById('template_select').value;
+            const sampleName = 'Cliente Ejemplo';
+            const sampleTaller = '';
+            const csrf = document.getElementById('csrf_token').value;
+
+            fetch('{% url "email_preview" %}', {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
+                body: new URLSearchParams({template_key: tpl, sample_name: sampleName, sample_taller_id: sampleTaller})
+            }).then(r=>r.text()).then(html=>{
+                const previewWin = window.open('', '_blank', 'width=700,height=600');
+                previewWin.document.write(html);
+                previewWin.document.close();
+            }).catch(err=>alert('Error al generar la vista previa: '+err));
         });
         
         // -----------------------------------------------------

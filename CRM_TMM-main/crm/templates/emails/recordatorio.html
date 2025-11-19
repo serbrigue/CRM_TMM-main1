@@ -1,0 +1,10 @@
+<html>
+  <body style="font-family: Arial, sans-serif; color: #222;">
+    <h2 style="color:#d63384;">Recordatorio de Pago</h2>
+    <p>Hola <strong>{{ nombre_cliente }}</strong>,</p>
+    <p>Te recordamos que tienes un pago pendiente para el taller <strong>{{ taller_nombre }}</strong> (estado: {{ estado }}).</p>
+    <p>Para completar tu pago, haz clic en el siguiente enlace:</p>
+    <p><a href="{{ pago_url }}" style="background:#e91e63; color:white; padding:8px 12px; border-radius:6px; text-decoration:none;">Pagar ahora</a></p>
+    <p>Saludos,<br>Equipo TMM</p>
+  </body>
+</html>

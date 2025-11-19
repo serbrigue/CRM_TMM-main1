@@ -1,0 +1,8 @@
+Hola {{ nombre_cliente }},
+
+Te recordamos que tienes un pago pendiente para el taller "{{ taller_nombre }}" (estado: {{ estado }}).
+
+Por favor completa tu pago aquí: {{ pago_url }}
+
+Saludos,
+Equipo TMM

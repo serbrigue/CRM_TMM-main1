@@ -1,0 +1,41 @@
+services:
+  # Servicio de la aplicación Django
+  web:
+    # Construye la imagen usando el Dockerfile dentro de `CRM_TMM-main`
+    build:
+      context: ./CRM_TMM-main
+      dockerfile: dockerfile
+    # Cargar variables de entorno desde el archivo .env del proyecto
+    env_file:
+      - ./CRM_TMM-main/.env
+    # Mapea el puerto 8000 del contenedor al puerto 8000 de tu máquina local
+    ports:
+      - "8000:8000"
+    # Monta el directorio actual de tu proyecto en el directorio de trabajo del contenedor.
+    # Esto permite que los cambios de código se reflejen inmediatamente sin reconstruir.
+    volumes:
+      - ./CRM_TMM-main:/usr/src/app
+      # Volumen para archivos estáticos y de medios
+      - static_volume:/usr/src/app/static
+      - media_volume:/usr/src/app/media
+    working_dir: /usr/src/app
+    # Las variables de entorno se cargan desde `./CRM_TMM-main/.env`
+    # Asegura que la aplicación espere a que la base de datos esté lista
+    depends_on:
+      - db
+
+  # Servicio de la base de datos PostgreSQL
+  db:
+    image: postgres:14-alpine
+    # Mapea el volumen para la persistencia de datos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    # Cargar credenciales DB desde el mismo archivo .env
+    env_file:
+      - ./CRM_TMM-main/.env
+
+# Definición de los volúmenes para persistencia
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:

@@ -148,9 +148,19 @@
     <h2 class="tmm-title">Accesa a su Cuenta TMM</h2>
     <div class="tmm-divider"></div>
 
-    {% if form.errors %}
+    {% if form.non_field_errors %}
       <div class="tmm-error">
-        Tu nombre de usuario o contraseña no coinciden. Intenta de nuevo.
+        {% for err in form.non_field_errors %}
+          {{ err }}{% if not forloop.last %}<br>{% endif %}
+        {% endfor %}
+      </div>
+    {% elif form.errors %}
+      <div class="tmm-error">
+        {% for field, errors in form.errors.items %}
+          {% for err in errors %}
+            {{ err }}{% if not forloop.last %}<br>{% endif %}
+          {% endfor %}
+        {% endfor %}
       </div>
     {% endif %}
 
@@ -161,13 +171,79 @@
         <input type="text" name="{{ form.username.name }}" id="{{ form.username.id_for_label }}" class="tmm-input" required>
       </div>
 
+      {% if password_requirements %}
+        <div id="pw-requirements" style="margin-bottom:12px; font-size:0.9rem; color:#374151; background:#fffaf0; padding:8px; border-radius:6px; border:1px solid #fde2e8;">
+          <strong>Requisitos de contraseña:</strong>
+          <div style="margin-top:6px;">{{ password_requirements }}</div>
+          <ul id="pw-checklist" style="margin:8px 0 0 18px; padding:0; list-style:none; color:#6b7280;">
+            <li data-test="length">❌ Al menos 8 caracteres</li>
+            <li data-test="upper">❌ Una letra mayúscula</li>
+            <li data-test="lower">❌ Una letra minúscula</li>
+            <li data-test="digit">❌ Un número</li>
+          </ul>
+        </div>
+      {% endif %}
       <div class="tmm-field">
         <label for="{{ form.password.id_for_label }}">Contraseña</label>
         <input type="password" name="{{ form.password.name }}" id="{{ form.password.id_for_label }}" class="tmm-input" required>
       </div>
 
-      <button type="submit" class="tmm-btn">Iniciar Sesión</button>
+
+
+      <button type="submit" class="tmm-btn" id="loginSubmit">Iniciar Sesión</button>
     </form>
+
+    <script>
+      (function(){
+        const pwInput = document.getElementById('{{ form.password.id_for_label }}');
+        const submitBtn = document.getElementById('loginSubmit');
+        const checklist = document.getElementById('pw-checklist');
+
+        if(!pwInput || !submitBtn || !checklist) return;
+
+        const items = {
+          length: checklist.querySelector('li[data-test="length"]'),
+          upper: checklist.querySelector('li[data-test="upper"]'),
+          lower: checklist.querySelector('li[data-test="lower"]'),
+          digit: checklist.querySelector('li[data-test="digit"]'),
+        };
+
+        function validatePassword(val){
+          const ok = {
+            length: val.length >= 8,
+            upper: /[A-Z]/.test(val),
+            lower: /[a-z]/.test(val),
+            digit: /[0-9]/.test(val),
+          };
+
+          // Update checklist display
+          Object.keys(ok).forEach(k => {
+            const el = items[k];
+            if(!el) return;
+            if(ok[k]){
+              el.textContent = '✅ ' + el.textContent.replace(/^.\s*/, '').trim();
+              el.style.color = '#166534';
+            } else {
+              el.textContent = '❌ ' + el.textContent.replace(/^.\s*/, '').trim();
+              el.style.color = '#9f1239';
+            }
+          });
+
+          // Enable submit only if all true
+          const all = Object.values(ok).every(Boolean);
+          submitBtn.disabled = !all;
+          if(submitBtn.disabled){ submitBtn.style.opacity = '0.6'; }
+          else { submitBtn.style.opacity = '1'; }
+        }
+
+        // Initialize state (show requirements before any submit)
+        validatePassword(pwInput.value || '');
+
+        pwInput.addEventListener('input', function(e){
+          validatePassword(e.target.value || '');
+        });
+      })();
+    </script>
 
     <a href="{% url 'admin:index' %}" class="tmm-link">Ir al Panel Avanzado (Admin)</a>
   </div>

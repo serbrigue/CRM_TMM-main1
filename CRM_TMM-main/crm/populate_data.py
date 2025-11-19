@@ -50,6 +50,27 @@ def get_random_datetime(days_ago_min, days_ago_max):
     random_seconds = random.randrange(int(time_diff.total_seconds()))
     return start_time + datetime.timedelta(seconds=random_seconds)
 
+
+def get_random_date_between(start_date, end_date):
+    """Genera una fecha aleatoria entre dos fechas (incluye ambos extremos)."""
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    days_between = (end_date - start_date).days
+    if days_between <= 0:
+        return start_date
+    return start_date + datetime.timedelta(days=random.randint(0, days_between))
+
+
+def get_random_datetime_between(start_dt, end_dt):
+    """Genera un datetime aleatorio entre dos datetimes (incluye ambos extremos)."""
+    if start_dt > end_dt:
+        start_dt, end_dt = end_dt, start_dt
+    delta = end_dt - start_dt
+    total_seconds = int(delta.total_seconds())
+    if total_seconds <= 0:
+        return start_dt
+    return start_dt + datetime.timedelta(seconds=random.randint(0, total_seconds))
+
 def clean_database():
     """Elimina todos los datos de los modelos de prueba para empezar limpio."""
     print("Limpiando la base de datos...")
@@ -174,6 +195,8 @@ def populate_initial_data():
     # --- 5. TALLERES (7 Talleres - Lógica sin cambios significativos) ---
     print("5. Creando Talleres...")
     talleres_list = []
+    # Año actual para crear históricos y futuros relativos al año en ejecución
+    current_year = timezone.now().year
     # Taller B2B
     taller_b2b_obj = Taller.objects.create(
         nombre='Taller Autocuidado Corporativo',
@@ -181,7 +204,7 @@ def populate_initial_data():
         precio=precios_base['Bienestar Corporativo'],
         cupos_totales=30,
         categoria=intereses_map['Bienestar Corporativo'],
-        fecha_taller=date(2025, 12, 5),
+        fecha_taller=date( current_year, 12, 5),
         modalidad='PRESENCIAL',
         esta_activo=True
     )
@@ -196,13 +219,74 @@ def populate_initial_data():
             cupos_totales=random.choice([10, 12, 15]),
             categoria=nombre_int,
             modalidad=random.choice(['PRESENCIAL', 'ONLINE']),
-            fecha_taller=date(2025, 12, random.randint(10, 25)),
+            fecha_taller=date(current_year, 12, random.randint(10, 25)),
             esta_activo=True
         )
         talleres_list.append(taller)
-    # Talleres B2C Históricos
-    talleres_list.append(Taller.objects.create(nombre='Resina Inicial (Oct 2025)', precio=precios_base['Resina'], cupos_totales=20, categoria=intereses_map['Resina'], fecha_taller=date(2025, 10, 10), esta_activo=False, cupos_disponibles=0))
-    talleres_list.append(Taller.objects.create(nombre='Encuadernación Básica (Sep 2025)', precio=precios_base['Encuadernación'], cupos_totales=20, categoria=intereses_map['Encuadernación'], fecha_taller=date(2025, 9, 20), esta_activo=False, cupos_disponibles=0))
+    # Talleres B2C Históricos: generar uno por mes desde Junio a Noviembre del año actual
+    historical_start_month = 6
+    historical_end_month = 11
+    for m in range(historical_start_month, historical_end_month + 1):
+        # Elegir una categoría aleatoria para el taller histórico
+        cat = random.choice(intereses_b2c_list)
+        day = random.randint(1, 25)
+        try:
+            fecha_hist = date(current_year, m, day)
+        except Exception:
+            # Si el día no existe en el mes (ej. 31), ajustar al último día del mes
+            last_day = calendar.monthrange(current_year, m)[1]
+            fecha_hist = date(current_year, m, last_day)
+
+        talleres_list.append(Taller.objects.create(
+            nombre=f'{cat.nombre} Histórico {fecha_hist.strftime("%b %Y")}',
+            precio=precios_base[cat.nombre],
+            cupos_totales=20,
+            categoria=cat,
+            fecha_taller=fecha_hist,
+            esta_activo=False,
+            cupos_disponibles=0
+        ))
+
+    # --- CREAR INSCRIPCIONES HISTÓRICAS PARA LOS TALLERES INACTIVOS (Jun-Nov) ---
+    print("6a. Creando inscripciones históricas para talleres inactivos (Jun-Nov)...")
+    historical_talleres = [t for t in talleres_list if not t.esta_activo]
+    # Clientes B2C disponibles para asignar inscripciones
+    clientes_b2c_list = list(Cliente.objects.filter(tipo_cliente='B2C'))
+    if clientes_b2c_list and historical_talleres:
+        for taller_hist in historical_talleres:
+            # Número de inscripciones históricas por taller (3-10)
+            num_ins = random.randint(3, min(10, max(3, len(clientes_b2c_list))))
+            clientes_seleccionados = random.sample(clientes_b2c_list, min(num_ins, len(clientes_b2c_list)))
+            for cliente in clientes_seleccionados:
+                try:
+                    with transaction.atomic():
+                        # Estado aleatorio: la mayoría pagadas, algunas pendientes/abonadas
+                        estado = random.choices(['PAGADO', 'PENDIENTE', 'ABONADO'], weights=[0.7, 0.2, 0.1])[0]
+                        if estado in ('PAGADO', 'ABONADO'):
+                            monto_pago = taller_hist.precio
+                        else:
+                            monto_pago = Decimal(0)
+
+                        # Fecha entre Junio y Noviembre del año actual
+                        start_dt = datetime.datetime.combine(date(current_year, 6, 1), datetime.time.min)
+                        end_dt = datetime.datetime.combine(date(current_year, 11, 30), datetime.time.max)
+                        fecha_insc = get_random_datetime_between(start_dt, end_dt)
+
+                        Inscripcion.objects.create(
+                            cliente=cliente,
+                            taller=taller_hist,
+                            monto_pagado=monto_pago,
+                            estado_pago=estado,
+                            fecha_inscripcion=fecha_insc
+                        )
+                        # Añadir interés relacionado
+                        if taller_hist.categoria:
+                            cliente.intereses_cliente.add(taller_hist.categoria)
+                except IntegrityError:
+                    # Evitar duplicados si existen
+                    continue
+    else:
+        print("No hay clientes B2C o talleres históricos para crear inscripciones.")
 
 
     # --- 6. INSCRIPCIONES ---
@@ -266,7 +350,13 @@ def populate_initial_data():
         for t in talleres_para_cliente:
             estado = 'PAGADO'
             monto = t.precio
-            fecha_insc = get_random_datetime(1, 60) if t.esta_activo else get_random_datetime(60, 540)
+            if t.esta_activo:
+                fecha_insc = get_random_datetime(1, 60)
+            else:
+                # Para inscripciones históricas, generar fecha entre Junio y Noviembre del año actual
+                start_dt = datetime.datetime.combine(date(current_year, 6, 1), datetime.time.min)
+                end_dt = datetime.datetime.combine(date(current_year, 11, 30), datetime.time.max)
+                fecha_insc = get_random_datetime_between(start_dt, end_dt)
 
             try:
                 with transaction.atomic():
@@ -297,7 +387,13 @@ def populate_initial_data():
     ventas_creadas = 0
 
     for cliente_venta in clientes_compradores:
-        fecha_venta_aleatoria = get_random_datetime(1, 365)
+        # 60% de las ventas serán históricas (entre Junio y Noviembre del año actual)
+        if random.random() < 0.6:
+            start_dt = datetime.datetime.combine(date(current_year, 6, 1), datetime.time.min)
+            end_dt = datetime.datetime.combine(date(current_year, 11, 30), datetime.time.max)
+            fecha_venta_aleatoria = get_random_datetime_between(start_dt, end_dt)
+        else:
+            fecha_venta_aleatoria = get_random_datetime(1, 365)
         productos_en_venta = random.sample(productos_list, random.randint(1, len(productos_list)))
         monto_total_venta = Decimal(0)
 
