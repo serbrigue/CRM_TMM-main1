@@ -23,7 +23,17 @@ services:
     # Asegura que la aplicación espere a que la base de datos esté lista
     depends_on:
       - db
-
+  locust:
+    image: crm_tmm-main1-web
+    command: locust -f /usr/src/app/locustfile.py --host http://web:8000 --web-host 0.0.0.0 --web-port 8089
+    depends_on:
+      - web
+    ports:
+      - "8089:8089"
+    # Mount the project into the locust container so local changes (e.g. locustfile.py)
+    # are visible immediately during development without rebuilding the image.
+    volumes:
+      - ./CRM_TMM-main:/usr/src/app
   # Servicio de la base de datos PostgreSQL
   db:
     image: postgres:14-alpine

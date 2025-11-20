@@ -63,17 +63,18 @@ def detalle_taller_inscripcion(request, taller_id):
     taller = get_object_or_404(Taller, pk=taller_id)
 
     if request.method == 'POST':
-        # Obtener datos del form (soporta usuarios autenticados y anónimos)
-        nombre = request.POST.get('nombre', '').strip()
-        email = request.POST.get('email', '').strip()
+
+        # Require authenticated user to create an enrollment
+        if not request.user.is_authenticated:
+            messages.error(request, 'Debes iniciar sesión para inscribirte en un taller.')
+            return redirect(f"{reverse('login')}?next={request.path}")
+
+        # Usuario autenticado: obtener teléfono opcional desde el form
+        nombre = request.user.get_full_name() or request.user.username
+        email = request.user.email
         telefono = request.POST.get('telefono', '').strip()
 
-        usuario = request.user if request.user.is_authenticated else None
-
-        # Si el usuario no está autenticado, requerimos nombre y email
-        if usuario is None and (not nombre or not email):
-            messages.error(request, 'Debes ingresar tu nombre y email, o iniciar sesión.')
-            return redirect('detalle_taller', taller_id=taller.id)
+        usuario = request.user
 
         inscripcion, created, msg = enroll_cliente_en_taller(taller.id, nombre, email, telefono=telefono, usuario=usuario)
 
@@ -94,8 +95,13 @@ def detalle_taller_inscripcion(request, taller_id):
     context = {
         'titulo': f'Detalle: {taller.nombre}',
         'taller': taller,
-        'show_form': not request.user.is_authenticated
+        # Mostrar el formulario solo a usuarios autenticados
+        'show_form': request.user.is_authenticated
     }
+    # Si el usuario es superusuario, incluir la lista de inscripciones para mostrarla en la plantilla
+    if request.user.is_superuser:
+        inscripciones = Inscripcion.objects.filter(taller=taller).select_related('cliente').order_by('-fecha_inscripcion')
+        context['inscripciones'] = inscripciones
     return render(request, 'crm/detalle_taller.html', context)
 
 def pago_simulado(request, inscripcion_id):
@@ -222,6 +228,204 @@ def is_superuser(user):
     return user.is_superuser
 
 
+@user_passes_test(is_superuser)
+def gestion_talleres(request):
+    """Pantalla administrativa para listar y crear talleres activos.
+
+    Muestra tarjetas con información básica y permite crear un nuevo taller
+    desde un formulario rápido.
+    """
+    from .forms import TallerForm
+
+    if request.method == 'POST' and request.POST.get('action') == 'crear_taller':
+        form = TallerForm(request.POST, request.FILES)
+        if form.is_valid():
+            taller = form.save()
+            messages.success(request, f'Taller "{taller.nombre}" creado correctamente.')
+            return redirect('gestion_talleres')
+        else:
+            messages.error(request, 'Corrige los errores del formulario al crear el taller.')
+    else:
+        form = TallerForm()
+
+    talleres_activos = Taller.objects.filter(esta_activo=True).order_by('fecha_taller')
+
+    # Filtros
+    categoria_filtro = request.GET.get('categoria')
+    modalidad_filtro = request.GET.get('modalidad')
+
+    if categoria_filtro:
+        talleres_activos = talleres_activos.filter(categoria__id=categoria_filtro)
+    
+    if modalidad_filtro:
+        talleres_activos = talleres_activos.filter(modalidad=modalidad_filtro)
+
+    context = {
+        'titulo': 'Gestión de Talleres',
+        'talleres': talleres_activos,
+        'form': form,
+    }
+    return render(request, 'crm/gestion_talleres.html', context)
+
+
+@user_passes_test(is_superuser)
+def detalle_taller_admin(request, taller_id):
+    """
+    Detalle administrativo de un taller: ver inscritos, estados, filtrar y acciones masivas.
+    """
+    # Asegúrate de tener estos imports al inicio de tu archivo views.py
+    # o descoméntalos aquí si no los tienes arriba:
+    # from django.shortcuts import get_object_or_404, redirect, render
+    # from django.contrib import messages
+    # from django.template.loader import render_to_string
+    # from django.urls import reverse
+    # from .models import Taller, Inscripcion
+    from .forms import TallerForm, AdminEmailForm
+    
+    taller = get_object_or_404(Taller, pk=taller_id)
+
+    # ---------------------------------------------------------
+    # 1. ACCIONES POST (Actualizar, Enviar Correo, Cambiar Estado)
+    # ---------------------------------------------------------
+    
+    form = None # Inicializar variable para mantener errores si falla validación
+
+    # A) Actualizar datos del Taller
+    if request.method == 'POST' and request.POST.get('action') == 'actualizar_taller':
+        form = TallerForm(request.POST, request.FILES, instance=taller)
+        if form.is_valid():
+            old_total = taller.cupos_totales
+            taller = form.save(commit=False)
+            new_total = taller.cupos_totales
+            
+            # Ajustar cupos_disponibles proporcionalmente
+            try:
+                delta = new_total - old_total
+                taller.cupos_disponibles = max(0, (taller.cupos_disponibles or 0) + delta)
+            except Exception:
+                inscritos_count = Inscripcion.objects.filter(taller=taller).count()
+                taller.cupos_disponibles = max(0, new_total - inscritos_count)
+            
+            taller.save()
+            messages.success(request, 'Taller actualizado correctamente.')
+            return redirect('detalle_taller_admin', taller_id=taller.id)
+        else:
+            messages.error(request, 'Errores al actualizar el taller. Revisa los datos.')
+
+    # B) Enviar correos masivos a seleccionados
+    if request.method == 'POST' and request.POST.get('action') == 'enviar_email_inscritos':
+        email_form = AdminEmailForm(request.POST)
+        selected = request.POST.getlist('inscripcion_sel')
+        
+        if not selected:
+            messages.error(request, 'No seleccionaste inscritos para enviar correo.')
+        elif email_form.is_valid():
+            asunto = email_form.cleaned_data['asunto']
+            mensaje = email_form.cleaned_data['mensaje']
+            plantilla = email_form.cleaned_data.get('plantilla')
+            
+            inscripciones_sel = Inscripcion.objects.filter(id__in=selected).select_related('cliente')
+            
+            from .utils.email import send_email as send_email_util
+            sender_name = request.user.get_full_name() or request.user.username
+            
+            successes = 0
+            failures = []
+            
+            for ins in inscripciones_sel:
+                email = ins.cliente.email if ins.cliente else None
+                if not email:
+                    failures.append((None, 'Sin email'))
+                    continue
+                
+                # Preparar cuerpo del correo (Renderizar plantillas si aplica)
+                if plantilla and plantilla != 'personalizado':
+                    ctx = {
+                        'nombre_cliente': ins.cliente.nombre_completo if ins.cliente else '',
+                        'taller_nombre': taller.nombre,
+                        'estado': ins.get_estado_pago_display(),
+                        'pago_url': request.build_absolute_uri(reverse('pago_simulado', args=[ins.id]))
+                    }
+                    try:
+                        text_body = render_to_string(f'emails/{plantilla}.txt', ctx)
+                    except Exception:
+                        text_body = mensaje
+                    try:
+                        html_body = render_to_string(f'emails/{plantilla}.html', ctx)
+                    except Exception:
+                        html_body = None
+                else:
+                    text_body = mensaje.replace('[Nombre del Cliente]', ins.cliente.nombre_completo if ins.cliente else '')
+                    html_body = None
+
+                ok, err = send_email_util(
+                    recipient=email, 
+                    subject=asunto, 
+                    text_body=text_body, 
+                    html_body=html_body, 
+                    inscripcion=ins, 
+                    sender_name=sender_name
+                )
+                
+                if ok:
+                    successes += 1
+                else:
+                    failures.append((email, err or 'Error desconocido'))
+
+            if successes:
+                messages.success(request, f'Correos enviados: {successes}')
+            if failures:
+                messages.error(request, f'Fallaron {len(failures)} envíos.')
+            
+            return redirect('detalle_taller_admin', taller_id=taller.id)
+        else:
+            messages.error(request, f'Error en el formulario de correo: {email_form.errors}')
+
+    # C) Actualizar estado individual (Botón rápido o AJAX si implementaras)
+    if request.method == 'POST' and request.POST.get('action') == 'actualizar_estado_inscripcion':
+        ins_id = request.POST.get('inscripcion_id')
+        nuevo_estado = request.POST.get('nuevo_estado')
+        try:
+            ins = Inscripcion.objects.get(id=ins_id, taller=taller)
+            ins.estado_pago = nuevo_estado
+            ins.save()
+            messages.success(request, 'Estado de inscripción actualizado.')
+        except Inscripcion.DoesNotExist:
+            messages.error(request, 'Inscripción no encontrada.')
+        return redirect('detalle_taller_admin', taller_id=taller.id)
+
+    # ---------------------------------------------------------
+    # 2. LOGICA GET (Filtros y Renderizado)
+    # ---------------------------------------------------------
+    
+    # Consulta base: Traer TODOS (sin slicing [:15])
+    inscripciones = Inscripcion.objects.filter(taller=taller).select_related('cliente').order_by('-fecha_inscripcion')
+    
+    # Filtro por Estado de Pago
+    estado_filtro = request.GET.get('estado')
+    if estado_filtro:
+        inscripciones = inscripciones.filter(estado_pago=estado_filtro)
+
+    # Formularios para el template
+    if form is None:
+        form = TallerForm(instance=taller)
+        
+    email_form = AdminEmailForm(initial={
+        'asunto': f'Recordatorio: pago pendiente {taller.nombre}', 
+        'mensaje': 'Estimado/a [Nombre del Cliente],\n\nTienes un pago pendiente...'
+    })
+
+    context = {
+        'titulo': f'Administrador - Taller: {taller.nombre}',
+        'taller': taller,
+        'inscripciones': inscripciones,       # Lista completa o filtrada
+        'inscripciones_total': inscripciones.count(),
+        'form': form,
+        'email_form': email_form,
+        'estado_filtro': estado_filtro,       # Para mantener el select activo en el HTML
+    }
+    
+    return render(request, 'crm/detalle_taller_admin.html', context)
 # =========================================================================
 # FUNCIÓN MODIFICADA PARA INCLUIR EL FILTRO DE ESTADO DE PAGO
 # =========================================================================
@@ -483,6 +687,8 @@ def panel_reportes(request):
     # Rellenar la serie con 0 donde no hay datos
     ingresos_labels = [m.strftime('%b %Y') for m in months]
     ingresos_data = [float(totals_map.get(m, 0)) for m in months]
+    # Metadata para redirección (Mes y Año)
+    ingresos_meta = [{'mes': m.month, 'anio': m.year} for m in months]
 
     # Log para depuración: ver en logs del contenedor qué serie se está enviando
     logger = logging.getLogger(__name__)
@@ -499,7 +705,7 @@ def panel_reportes(request):
     # 2. Inscripciones por Categoría (Gráfico de Dona)
     inscripciones_por_categoria = Inscripcion.objects.filter(
         estado_pago__in=['PAGADO', 'ABONADO']
-    ).values('taller__categoria__nombre').annotate(
+    ).values('taller__categoria__nombre', 'taller__categoria__id').annotate(
         conteo=Count('id')
     ).order_by('-conteo')
 
@@ -507,6 +713,7 @@ def panel_reportes(request):
         item['taller__categoria__nombre'] or 'Sin Categoría' for item in inscripciones_por_categoria
     ]
     categoria_data = [item['conteo'] for item in inscripciones_por_categoria]
+    categoria_ids = [item['taller__categoria__id'] for item in inscripciones_por_categoria]
 
     # 3. Inscripciones por Modalidad (Gráfico de Barras)
     inscripciones_por_modalidad = Inscripcion.objects.filter(
@@ -521,7 +728,20 @@ def panel_reportes(request):
         for item in inscripciones_por_modalidad
     ]
     modalidad_data = [item['conteo'] for item in inscripciones_por_modalidad]
+    modalidad_keys = [item['taller__modalidad'] for item in inscripciones_por_modalidad]
 
+    # 4. Ingresos por Categoría (Gráfico de Barras)
+    ingresos_por_categoria = Inscripcion.objects.filter(
+        estado_pago__in=['PAGADO', 'ABONADO']
+    ).values('taller__categoria__nombre', 'taller__categoria__id').annotate(
+        total=Sum('monto_pagado')
+    ).order_by('-total')
+
+    ingresos_categoria_labels = [
+        item['taller__categoria__nombre'] or 'Sin Categoría' for item in ingresos_por_categoria
+    ]
+    ingresos_categoria_data = [float(item['total'] or 0) for item in ingresos_por_categoria]
+    ingresos_categoria_ids = [item['taller__categoria__id'] for item in ingresos_por_categoria]
 
     context = {
         'titulo': 'Panel de Reportes y Análisis CRM',
@@ -534,12 +754,76 @@ def panel_reportes(request):
         # DATOS PARA GRÁFICOS
         'ingresos_labels': ingresos_labels,
         'ingresos_data': ingresos_data,
+        'ingresos_meta': ingresos_meta,
         'categoria_labels': categoria_labels,
         'categoria_data': categoria_data,
+        'categoria_ids': categoria_ids,
         'modalidad_labels': modalidad_labels,
         'modalidad_data': modalidad_data,
+        'modalidad_keys': modalidad_keys,
+        'ingresos_categoria_labels': ingresos_categoria_labels,
+        'ingresos_categoria_data': ingresos_categoria_data,
+        'ingresos_categoria_ids': ingresos_categoria_ids,
     }
     return render(request, 'crm/panel_reportes.html', context)
+
+@user_passes_test(is_superuser)
+def desglose_ingresos(request):
+    """
+    Vista para ver el detalle de los ingresos con filtros.
+    """
+    from .models import Interes # Importar aquí o arriba si es necesario
+
+    # Filtros
+    mes_filtro = request.GET.get('mes')
+    anio_filtro = request.GET.get('anio')
+    categoria_filtro = request.GET.get('categoria')
+
+    inscripciones = Inscripcion.objects.filter(
+        estado_pago__in=['PAGADO', 'ABONADO']
+    ).select_related('cliente', 'taller', 'taller__categoria').order_by('-fecha_inscripcion')
+
+    if mes_filtro:
+        inscripciones = inscripciones.filter(fecha_inscripcion__month=mes_filtro)
+    
+    if anio_filtro:
+        inscripciones = inscripciones.filter(fecha_inscripcion__year=anio_filtro)
+    
+    if categoria_filtro:
+        inscripciones = inscripciones.filter(taller__categoria__id=categoria_filtro)
+
+    total_filtrado = inscripciones.aggregate(total=Sum('monto_pagado'))['total'] or 0
+
+    # Datos para los selectores
+    categorias = Interes.objects.all().order_by('nombre')
+    
+    # Generar lista de años disponibles (basado en datos reales)
+    anios_disponibles = Inscripcion.objects.dates('fecha_inscripcion', 'year')
+    anios = [d.year for d in anios_disponibles]
+    # Asegurar que el año actual esté si no hay datos
+    current_year = timezone.now().year
+    if current_year not in anios:
+        anios.append(current_year)
+    anios = sorted(list(set(anios)), reverse=True)
+
+    meses = [
+        (1, 'Enero'), (2, 'Febrero'), (3, 'Marzo'), (4, 'Abril'),
+        (5, 'Mayo'), (6, 'Junio'), (7, 'Julio'), (8, 'Agosto'),
+        (9, 'Septiembre'), (10, 'Octubre'), (11, 'Noviembre'), (12, 'Diciembre')
+    ]
+
+    context = {
+        'titulo': 'Desglose de Ingresos',
+        'inscripciones': inscripciones,
+        'total_filtrado': total_filtrado,
+        'categorias': categorias,
+        'meses': meses,
+        'anios': anios,
+        'mes_filtro': mes_filtro,
+        'anio_filtro': anio_filtro,
+        'categoria_filtro': categoria_filtro,
+    }
+    return render(request, 'crm/desglose_ingresos.html', context)
 
 
 @user_passes_test(is_superuser)
@@ -554,6 +838,7 @@ def listado_clientes(request):
     tipo_cliente_filtro = request.GET.get('tipo', None)
     intereses_filtro = request.GET.getlist('interes', [])
     taller_asistir_filtro = request.GET.get('taller_asistir', None)
+    deudores_filtro = request.GET.get('deudores', None)
 
     clientes = Cliente.objects.all().order_by('-fecha_registro')
 
@@ -570,6 +855,11 @@ def listado_clientes(request):
         clientes = clientes.filter(
             inscripciones__taller__id=taller_id,
             inscripciones__estado_pago__in=['PENDIENTE', 'ABONADO', 'PAGADO']
+        ).distinct()
+    
+    if deudores_filtro == 'true':
+        clientes = clientes.filter(
+            inscripciones__estado_pago__in=['PENDIENTE', 'ABONADO']
         ).distinct()
 
     # --- Lógica de Acción por Lote (POST) ---
@@ -839,11 +1129,11 @@ def perfil_usuario(request):
         'historial_compras': historial_compras,
         'talleres_recomendados': talleres_recomendados,
         # --- DATOS DEL CALENDARIO ---
-        'mes_calendario': mes_calendario, # La matriz de semanas y días
-        'fechas_cursos_activas': fechas_cursos_activas, # Set de fechas clave (date objects)
-        'mes_actual_nombre': month_name.capitalize(),
-        'anio_actual': current_year,
-        'current_month': current_month, # Se usa en el template para filtrar los días correctos
+        'mes_calendario': mes_calendario # La matriz de semanas y días
+        ,'fechas_cursos_activas': fechas_cursos_activas # Set de fechas clave (date objects)
+        ,'mes_actual_nombre': month_name.capitalize()
+        ,'anio_actual': current_year
+        ,'current_month': current_month # Se usa en el template para filtrar los días correctos
         # ----------------------------
     }
     
@@ -930,7 +1220,7 @@ def ver_carrito(request):
             # Convertir el precio de str a Decimal para el cálculo
             precio = Decimal(str(data.get('precio', '0'))) 
             subtotal = precio * Decimal(cantidad)
-            subtotal_general += subtotal
+            subtotal_general += subtotal;
 
             items.append({
                 'producto': producto,

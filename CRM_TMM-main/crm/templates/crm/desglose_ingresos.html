@@ -1,0 +1,276 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+<style>
+    /* --- ESTILOS GLOBALES (Coherencia con el CRM) --- */
+    
+    /* Botones */
+    .primary-btn {
+        background-color: #d63384;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-block;
+        transition: background 0.2s;
+        width: 100%; /* Para el botón de filtrar */
+        text-align: center;
+    }
+    .primary-btn:hover { background-color: #ad1e62; color: white; }
+
+    .secondary-btn {
+        background-color: white;
+        color: #d63384;
+        border: 1px solid #f3d1d9;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-block;
+        transition: background 0.2s;
+    }
+    .secondary-btn:hover { background-color: #fff0f6; }
+
+    /* Contenedor de Filtros (Estilo "Tarjeta Suave") */
+    .filter-card {
+        background: linear-gradient(to bottom right, #fff8f8, #fdf2f8);
+        border: 1px solid #fde2e8;
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    }
+
+    /* Grid para el formulario de filtros */
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        align-items: end; /* Alinea el botón con los inputs */
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 700;
+        color: #a61e4d;
+        font-size: 0.9rem;
+    }
+
+    .form-select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        background-color: white;
+        font-size: 0.95rem;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .form-select:focus {
+        border-color: #d63384;
+    }
+
+    /* Tarjeta de Resultados */
+    .result-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+        border: 1px solid #f3e6ea;
+        overflow: hidden;
+    }
+
+    .result-header {
+        padding: 20px;
+        border-bottom: 1px solid #f3e6ea;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #fffafc;
+    }
+
+    .total-display {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #333;
+    }
+    .total-amount {
+        color: #d63384;
+        font-size: 1.4rem;
+    }
+
+    /* Tabla Personalizada */
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .custom-table th {
+        background-color: #fce4ec; /* Rosa muy suave */
+        color: #a61e4d; /* Rosa oscuro */
+        font-weight: 700;
+        padding: 15px;
+        text-align: left;
+        font-size: 0.95rem;
+    }
+
+    .custom-table td {
+        padding: 15px;
+        border-bottom: 1px solid #f1f1f1;
+        color: #555;
+        vertical-align: middle;
+    }
+
+    .custom-table tr:hover td {
+        background-color: #fafafa;
+    }
+
+    /* Badges de Estado */
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        display: inline-block;
+    }
+    .status-pagado { background-color: #e6fffa; color: #00a185; } /* Verde menta */
+    .status-pendiente { background-color: #fff7ed; color: #d97706; } /* Naranja suave */
+    .status-otro { background-color: #f1f3f5; color: #495057; } /* Gris */
+
+    /* Link de cliente */
+    .client-link {
+        color: #d63384;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .client-link:hover { text-decoration: underline; }
+
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+    <div>
+        <h2 style="margin: 0; color: #333;">💰 Desglose de Ingresos</h2>
+        <p style="margin: 5px 0 0 0; color: #777;">Reporte detallado de transacciones por fecha y categoría.</p>
+    </div>
+    <a href="{% url 'panel_reportes' %}" class="secondary-btn">
+        &larr; Volver al Panel
+    </a>
+</div>
+
+<div class="filter-card">
+    <form method="get">
+        <div class="filter-grid">
+            <div class="form-group">
+                <label for="mes">Mes</label>
+                <select name="mes" id="mes" class="form-select">
+                    <option value="">Todos los meses</option>
+                    {% for m_num, m_name in meses %}
+                        <option value="{{ m_num }}" {% if mes_filtro == m_num|stringformat:"i" %}selected{% endif %}>{{ m_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="anio">Año</label>
+                <select name="anio" id="anio" class="form-select">
+                    <option value="">Histórico completo</option>
+                    {% for y in anios %}
+                        <option value="{{ y }}" {% if anio_filtro == y|stringformat:"i" %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="categoria">Categoría</label>
+                <select name="categoria" id="categoria" class="form-select">
+                    <option value="">Todas las categorías</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat.id }}" {% if categoria_filtro == cat.id|stringformat:"i" %}selected{% endif %}>{{ cat.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="primary-btn">
+                    🔍 Filtrar Resultados
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="result-card">
+    
+    <div class="result-header">
+        <span style="color: #666; font-weight: 500;">Transacciones encontradas: <strong>{{ inscripciones|length }}</strong></span>
+        <div class="total-display">
+            Total Filtrado: <span class="total-amount">${{ total_filtrado|intcomma }}</span>
+        </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Taller / Evento</th>
+                    <th>Categoría</th>
+                    <th style="text-align: right;">Monto Pagado</th>
+                    <th style="text-align: center;">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inscripcion in inscripciones %}
+                    <tr>
+                        <td>{{ inscripcion.fecha_inscripcion|date:"d M Y" }}</td>
+                        <td>
+                            {% if inscripcion.cliente %}
+                                <a href="{% url 'detalle_cliente_admin' inscripcion.cliente.id %}" class="client-link">
+                                    {{ inscripcion.cliente.nombre_completo }}
+                                </a>
+                            {% else %}
+                                <span style="color: #999;">- Cliente Eliminado -</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ inscripcion.taller.nombre }}</td>
+                        <td>
+                            {% if inscripcion.taller.categoria %}
+                                <span style="background:#f8f9fa; padding:2px 6px; border-radius:4px; border:1px solid #eee; font-size:0.85em;">
+                                    {{ inscripcion.taller.categoria.nombre }}
+                                </span>
+                            {% else %}
+                                <span style="color: #ccc;">-</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right; font-weight: 600; color: #333;">
+                            ${{ inscripcion.monto_pagado|intcomma }}
+                        </td>
+                        <td style="text-align: center;">
+                            {% if inscripcion.estado_pago == 'PAGADO' %}
+                                <span class="status-badge status-pagado">Pagado</span>
+                            {% elif inscripcion.estado_pago == 'PENDIENTE' %}
+                                <span class="status-badge status-pendiente">Pendiente</span>
+                            {% else %}
+                                <span class="status-badge status-otro">{{ inscripcion.get_estado_pago_display }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: #888;">
+                            No se encontraron ingresos con los filtros seleccionados.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

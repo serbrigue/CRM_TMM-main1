@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#fff1f3"/>
+      <stop offset="1" stop-color="#fff6f9"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#g)"/>
+  <g fill="#e399b6" font-family="Segoe UI, Arial, sans-serif" font-weight="600" font-size="28" text-anchor="middle">
+    <text x="50%" y="48%">Sin imagen disponible</text>
+  </g>
+</svg>

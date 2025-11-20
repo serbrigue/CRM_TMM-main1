@@ -1,0 +1,333 @@
+{% extends 'crm/base.html' %}
+{% load humanize %}
+
+{% block content %}
+<style>
+    /* --- Estilos Generales Admin --- */
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); overflow: hidden; border:1px solid #f3e6ea }
+    .card-body { padding: 12px; }
+    .admin-btn { padding: 8px 12px; border-radius: 8px; border: 2px solid #ff922b; color: #ff922b; text-decoration:none; display:inline-block; cursor: pointer; background: white; }
+    .admin-btn:hover { background:#fffaf0; color:#d87d00 }
+    .admin-table { width:100%; border-collapse:collapse; margin-top:12px }
+    .admin-table th, .admin-table td { padding:10px 8px; border-bottom:1px solid #f3e6ea }
+    .admin-table th { text-align:left; color:#7a2b49; font-weight:700 }
+    .muted { color:#777; font-size:0.9rem }
+    
+    /* Botones Principales */
+    .primary-btn { background:#d63384; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight: 600; transition: background 0.2s;}
+    .primary-btn:hover { background:#ad1e62; }
+    .secondary-btn { background:#fff; color:#d63384; border:2px solid #ffd9e6; padding:6px 10px; border-radius:8px; cursor:pointer }
+    
+    /* --- Estilos del Modal --- */
+    #emailModal {
+        display: none; 
+        position: fixed; 
+        z-index: 1000; 
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+    }
+    .modal-content {
+        background-color: #fefefe;
+        margin: 5% auto; 
+        padding: 25px;
+        border: 1px solid #888;
+        width: 90%;
+        max-width: 600px;
+        border-radius: 12px;
+        position: relative;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .close-btn {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    .close-btn:hover { color: #000; }
+    
+    .email-form-group { margin-bottom: 15px; }
+    .email-form-group label { display: block; margin-bottom: 6px; font-weight: bold; color: #a61e4d; }
+    .email-form-group input[type="text"], 
+    .email-form-group textarea,
+    .email-form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        background-color: #fff;
+    }
+
+    @media (max-width:800px) { .card { box-shadow:none } }
+</style>
+
+<h2>Administración: {{ taller.nombre }}</h2>
+
+<div style="display:flex; gap:16px; margin-bottom:14px; align-items:flex-start; flex-wrap: wrap;">
+    <div class="card" style="flex:1; min-width: 300px;">
+        <div class="card-body">
+            <h3 style="margin:0 0 8px 0; color: #d63384;">{{ taller.nombre }}</h3>
+            <div class="muted">Fecha: <strong>{{ taller.fecha_taller|date:"d M Y" }}{% if taller.hora_taller %} • {{ taller.hora_taller }}{% endif %}</strong></div>
+            <div class="muted">Precio: <strong>${{ taller.precio|intcomma }} CLP</strong></div>
+            <div class="muted">Cupos disponibles: <strong>{{ taller.cupos_disponibles }} / {{ taller.cupos_totales }}</strong></div>
+            <div style="margin-top:12px;"><button id="toggle-edit-btn" type="button" class="admin-btn">✏️ Modificar taller</button></div>
+        </div>
+    </div>
+
+    <div style="width:420px; max-width: 100%;">
+        <div class="card">
+            <div class="card-body">
+                <h4 style="margin:0 0 8px 0">Vista Previa</h4>
+                {% if taller.imagen %}
+                <img src="{{ taller.imagen.url }}" alt="Imagen" style="width:100%; height: 120px; object-fit: cover; border-radius:6px;" />
+                {% else %}
+                <div style="background: #f0f0f0; height: 100px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #999;">Sin imagen</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="editar-wrap" style="display:none; background: #fff8f8; padding: 20px; border-radius: 10px; border: 1px solid #f3d1d9; margin-bottom: 20px;">
+    <h3 style="margin-top: 0; color: #a61e4d;">Editar Taller</h3>
+    <form id="editar-form" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="actualizar_taller">
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:15px;">
+            <div>{{ form.nombre.label_tag }} {{ form.nombre }}</div>
+            <div>{{ form.categoria.label_tag }} {{ form.categoria }}</div>
+            <div>{{ form.hora_taller.label_tag }} {{ form.hora_taller }}</div>
+            <div>{{ form.modalidad.label_tag }} {{ form.modalidad }}</div>
+            <div>{{ form.precio.label_tag }} {{ form.precio }}</div>
+            <div>{{ form.cupos_totales.label_tag }} {{ form.cupos_totales }}</div>
+            <div>{{ form.esta_activo.label_tag }} {{ form.esta_activo }}</div>
+            <div style="grid-column: 1 / -1;">{{ form.descripcion.label_tag }} {{ form.descripcion }}</div>
+            <div style="grid-column: 1 / -1;">{{ form.imagen.label_tag }} {{ form.imagen }}</div>
+        </div>
+        <br/>
+        <button type="submit" class="primary-btn">💾 Guardar cambios</button>
+        <button type="button" id="cancel-edit-btn" class="secondary-btn" style="margin-left: 10px;">Cancelar</button>
+    </form>
+</div>
+
+<hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;"/>
+
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px; flex-wrap: wrap; gap: 15px;">
+    
+    <h3 style="color: #a61e4d; margin: 0;">
+        Inscritos 
+        <span style="background: #fce4ec; color: #c2185b; font-size: 0.7em; padding: 4px 10px; border-radius: 12px; vertical-align: middle;">
+            {{ inscripciones|length }}
+        </span>
+    </h3>
+
+    <form method="GET" id="filterForm" style="margin: 0;">
+        <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 5px 10px; border: 1px solid #f3d1d9; border-radius: 8px;">
+            <label for="estado" style="font-weight: 600; color: #a61e4d; font-size: 0.9rem;">Filtrar por estado:</label>
+            
+            <select name="estado" id="estado" onchange="document.getElementById('filterForm').submit()" 
+                    style="padding: 6px; border: 1px solid #ccc; border-radius: 4px; outline: none;">
+                <option value="" {% if not estado_filtro %}selected{% endif %}>Ver Todos</option>
+                <option value="PENDIENTE" {% if estado_filtro == 'PENDIENTE' %}selected{% endif %}>⏳ Pendientes</option>
+                <option value="PAGADO" {% if estado_filtro == 'PAGADO' %}selected{% endif %}>✅ Pagados</option>
+                <option value="CANCELADO" {% if estado_filtro == 'CANCELADO' %}selected{% endif %}>❌ Cancelados</option>
+                <option value="REEMBOLSADO" {% if estado_filtro == 'REEMBOLSADO' %}selected{% endif %}>↩️ Reembolsados</option>
+            </select>
+
+            {% if estado_filtro %}
+            <a href="{% url 'detalle_taller_admin' taller.id %}" style="text-decoration: none; color: #666; font-weight: bold;" title="Quitar filtros">×</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px solid #eee;">
+    <div class="muted" style="font-size: 0.9rem;">
+        Selecciona inscritos abajo para enviar correos.
+    </div>
+    <div>
+        <button id="send-emails-btn" type="button" class="primary-btn" style="font-size: 0.9rem;">
+            📧 Redactar Correo a Seleccionados
+        </button>
+    </div>
+</div>
+
+<div style="overflow-x: auto;">
+    <table class="admin-table">
+        <thead>
+            <tr style="background-color: #fce4ec;">
+                <th style="width:36px;"><input type="checkbox" id="select-all"></th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Teléfono</th>
+                <th>Estado Pago</th>
+                <th>Monto</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ins in inscripciones %}
+            <tr>
+                <td><input type="checkbox" name="inscripcion_sel" value="{{ ins.id }}" class="inscripcion-checkbox"></td>
+                <td>{{ ins.cliente.nombre_completo }}</td>
+                <td>{{ ins.cliente.email }}</td>
+                <td>{{ ins.cliente.telefono|default:"-" }}</td>
+                <td>
+                    {% if ins.estado_pago == 'PAGADO' %}
+                        <span style="background:#e6fffa; color:#00a185; padding: 3px 8px; border-radius: 12px; font-size: 0.85em; font-weight: bold;">Pagado</span>
+                    {% elif ins.estado_pago == 'PENDIENTE' %}
+                        <span style="background:#fff7ed; color:#d87d00; padding: 3px 8px; border-radius: 12px; font-size: 0.85em; font-weight: bold;">Pendiente</span>
+                    {% else %}
+                        <span style="background:#fff0f0; color:#e03131; padding: 3px 8px; border-radius: 12px; font-size: 0.85em; font-weight: bold;">{{ ins.get_estado_pago_display }}</span>
+                    {% endif %}
+                </td>
+                <td>${{ ins.monto_pagado|intcomma }}</td>
+                <td class="muted">{{ ins.fecha_inscripcion|date:"d/m/Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" style="text-align: center; padding: 20px;">No hay inscritos que coincidan con el filtro.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div id="emailModal">
+    <div class="modal-content">
+        <span class="close-btn" id="closeModal">&times;</span>
+        <h2 style="color: #d63384; margin-top: 0;">Enviar Correo de Gestión</h2>
+        
+        <p>Vas a enviar un correo a <strong id="recipientCount" style="color: #d63384;">0</strong> inscritos seleccionados.</p>
+        
+        <form id="email-modal-form" method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="enviar_email_inscritos">
+            
+            <div id="hidden-ids-container"></div>
+
+            <div class="email-form-group">
+                <label for="asunto_correo">Asunto:</label>
+                <input type="text" id="asunto_correo" name="asunto" required placeholder="Ej: Aviso importante...">
+            </div>
+            
+            <div class="email-form-group">
+                <label for="mensaje_correo">Mensaje:</label>
+                <select id="template_select" name="plantilla" style="width:100%; padding:10px; margin-bottom:10px; border-radius: 6px; border: 1px solid #ccc;">
+                    <option value="personalizado">✍️ Personalizado (Escribir mensaje libre)</option>
+                    <option value="recordatorio">🔔 Recordatorio de Pago</option>
+                    <option value="info_taller">ℹ️ Información del Taller</option>
+                    <option value="cancelacion">❌ Aviso Cancelación</option>
+                </select>
+                <textarea id="mensaje_correo" name="mensaje" rows="6" required placeholder="Escribe tu mensaje aquí..."></textarea>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" class="primary-btn" style="flex: 1; background: #2196f3; font-size: 1rem;">
+                    ✈️ Enviar Correos
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+
+    // --- A. Mostrar/Ocultar Edición ---
+    const toggleBtn = document.getElementById('toggle-edit-btn');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    const editarWrap = document.getElementById('editar-wrap');
+
+    if(toggleBtn && editarWrap){
+        toggleBtn.addEventListener('click', () => {
+            editarWrap.style.display = 'block';
+            editarWrap.scrollIntoView({behavior: 'smooth'});
+        });
+    }
+    if(cancelEditBtn && editarWrap){
+        cancelEditBtn.addEventListener('click', () => editarWrap.style.display = 'none');
+    }
+
+    // --- B. Seleccionar Todos ---
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.inscripcion-checkbox');
+
+    if(selectAll){
+        selectAll.addEventListener('change', function(){
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        });
+    }
+
+    // --- C. Lógica del MODAL ---
+    const emailTemplates = {
+        'personalizado': { asunto: '', mensaje: 'Hola [Nombre],\n\nEscribe aquí tu mensaje...\n\nSaludos,\nEquipo TMM' },
+        'recordatorio': { asunto: '🔔 Recordatorio de Pago: {{ taller.nombre }}', mensaje: 'Hola [Nombre],\n\nTe escribimos para recordarte que tienes un pago pendiente para el taller "{{ taller.nombre }}".\n\nPor favor, gestiona tu pago lo antes posible.\n\nSaludos,\nEquipo TMM' },
+        'info_taller': { asunto: 'ℹ️ Detalles: {{ taller.nombre }}', mensaje: 'Hola [Nombre],\n\nTe recordamos los detalles:\n📅 Fecha: {{ taller.fecha_taller|date:"d M Y" }}\n📍 Modalidad: {{ taller.get_modalidad_display }}\n\n¡Nos vemos pronto!\nEquipo TMM' },
+        'cancelacion': { asunto: '❌ Aviso Importante', mensaje: 'Hola [Nombre],\n\nLamentamos informarte que ha ocurrido un inconveniente con tu inscripción.\n\nPor favor contáctanos.\n\nSaludos,\nEquipo TMM' }
+    };
+
+    const sendBtn = document.getElementById('send-emails-btn');
+    const emailModal = document.getElementById('emailModal');
+    const closeModal = document.getElementById('closeModal');
+    const recipientCount = document.getElementById('recipientCount');
+    const templateSelect = document.getElementById('template_select');
+    const asuntoInput = document.getElementById('asunto_correo');
+    const mensajeInput = document.getElementById('mensaje_correo');
+    const modalForm = document.getElementById('email-modal-form');
+    const hiddenContainer = document.getElementById('hidden-ids-container');
+
+    // Abrir modal
+    if(sendBtn){
+        sendBtn.addEventListener('click', function(){
+            const selected = document.querySelectorAll('.inscripcion-checkbox:checked');
+            if(selected.length === 0){
+                alert('⚠️ Selecciona al menos un inscrito.');
+                return;
+            }
+            recipientCount.textContent = selected.length;
+            
+            // Pre-carga default si está vacío
+            if(!asuntoInput.value) {
+                templateSelect.value = 'personalizado';
+                mensajeInput.value = emailTemplates['personalizado'].mensaje;
+            }
+            emailModal.style.display = 'block';
+        });
+    }
+
+    // Cerrar modal
+    if(closeModal) closeModal.addEventListener('click', () => emailModal.style.display = 'none');
+    window.addEventListener('click', (e) => { if(e.target === emailModal) emailModal.style.display = 'none'; });
+
+    // Cambio de plantilla
+    if(templateSelect){
+        templateSelect.addEventListener('change', function(){
+            const key = this.value;
+            if(emailTemplates[key]){
+                asuntoInput.value = emailTemplates[key].asunto;
+                mensajeInput.value = emailTemplates[key].mensaje;
+            }
+        });
+    }
+
+    // Enviar formulario (Inyectar IDs seleccionados)
+    if(modalForm){
+        modalForm.addEventListener('submit', function(e){
+            hiddenContainer.innerHTML = ''; // Limpiar
+            const selected = document.querySelectorAll('.inscripcion-checkbox:checked');
+            selected.forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'inscripcion_sel'; 
+                input.value = cb.value;
+                hiddenContainer.appendChild(input);
+            });
+        });
+    }
+});
+</script>
+{% endblock content %}

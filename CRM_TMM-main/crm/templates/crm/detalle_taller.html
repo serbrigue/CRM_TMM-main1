@@ -185,7 +185,7 @@
     <h2>Reserva tu Cupo</h2>
 
     {% if taller.cupos_disponibles > 0 %}
-      {% if user.is_authenticated %}
+      {% if show_form %}
         <p style="color: green; font-weight: bold; text-align:center;">
             ¡Hola, {{ user.first_name|default:user.username }}! Usaremos tu cuenta para la inscripción.
         </p>
@@ -196,29 +196,8 @@
 
       {% else %}
         <p style="text-align:center; margin-bottom:20px;">
-          Ingresa tus datos para reservar tu cupo, o 
-          <a href="{% url 'login' %}">inicia sesión</a> si ya tienes una cuenta.
+          Para inscribirte debes <a href="{% url 'login' %}" data-test="login-link">iniciar sesión</a> o <a href="{% url 'registro_cliente' %}" data-test="register-link">crear una cuenta</a>.
         </p>
-        <form method="POST" action="{% url 'detalle_taller' taller_id=taller.id %}" class="tmm-form">
-          {% csrf_token %}
-
-          <div class="tmm-field">
-            <label for="nombre">Nombre Completo:</label>
-            <input type="text" id="nombre" name="nombre" class="tmm-input" required>
-          </div>
-
-          <div class="tmm-field">
-            <label for="email">Correo Electrónico:</label>
-            <input type="email" id="email" name="email" class="tmm-input" required>
-          </div>
-
-          <div class="tmm-field">
-            <label for="telefono">Teléfono (ej. +569XXXXXXXX):</label>
-            <input type="tel" id="telefono" name="telefono" class="tmm-input" required pattern="^\+?[0-9\s\-()]{7,20}$" title="Incluye prefijo internacional, sólo números y símbolos + - ( )" />
-          </div>
-
-          <button type="submit" class="tmm-btn">¡Inscribirme y Reservar!</button>
-        </form>
       {% endif %}
 
     {% else %}

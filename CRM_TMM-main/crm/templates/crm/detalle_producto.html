@@ -249,9 +249,9 @@
         
         {% if producto.esta_disponible %}
             {# FORMULARIO PARA AÑADIR AL CARRITO #}
-            <form method="POST" action="{% url 'agregar_a_carrito' producto_id=producto.id %}" style="display:inline;">
+            <form method="POST" action="{% url 'agregar_a_carrito' producto_id=producto.id %}" style="display:inline;" data-test="add-to-cart-form-{{ producto.id }}">
                 {% csrf_token %}
-                <button type="submit" class="tmm-btn-add">
+                <button type="submit" class="tmm-btn-add" data-test="add-to-cart-{{ producto.id }}">
                     🛒 Añadir al Carrito
                 </button>
             </form>

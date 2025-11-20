@@ -147,7 +147,7 @@
                 <span>${{ producto.precio_venta|intcomma }} CLP</span>
             </p>
             
-            <a href="{% url 'detalle_producto' producto_id=producto.id %}" class="tmm-btn">
+            <a href="{% url 'detalle_producto' producto_id=producto.id %}" class="tmm-btn" data-test="producto-link-{{ producto.id }}">
                 Ver Detalles
             </a>
             

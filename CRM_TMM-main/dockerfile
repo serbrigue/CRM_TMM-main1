@@ -1,8 +1,10 @@
 # Usa una imagen base de Python oficial. Reemplaza la versión según sea necesario.
-FROM python:3.11-slim
+## Use a newer slim base to avoid expired 'buster' repositories
+FROM python:3.11-slim-bullseye
 
 # Establece la variable de entorno para evitar que Python escriba archivos .pyc en el disco
 # y para que la salida estándar y de error no se almacene en búfer.
+
 ENV PYTHONUNBUFFERED 1
 
 # Establece el directorio de trabajo dentro del contenedor
@@ -12,6 +14,13 @@ WORKDIR /usr/src/app
 # Esto aprovecha el caché de Docker si los requisitos no cambian.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends chromium chromium-driver ca-certificates fonts-liberation libnss3 libgconf-2-4 libxss1 libasound2 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Establece la ruta del driver para webdriver-manager (aunque con el servicio no siempre es necesario, 
+# ayuda a la detección)
+ENV CHROME_DRIVER_PATH=/usr/bin/chromedriver
 
 # Copia el resto del código de la aplicación.
 COPY . .

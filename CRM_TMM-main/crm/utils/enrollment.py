@@ -37,6 +37,14 @@ def enroll_cliente_en_taller(taller_id, nombre, email, telefono=None, usuario=No
 
     try:
         with transaction.atomic():
+            # 1. Bloquear la fila del taller para evitar condiciones de carrera (overselling)
+            taller_locked = Taller.objects.select_for_update().get(pk=taller_id)
+
+            # 2. Verificar cupos con el bloqueo activo
+            if taller_locked.cupos_disponibles <= 0:
+                return (None, False, 'No hay cupos disponibles')
+
+            # 3. Obtener o crear cliente
             cliente, created_cliente = Cliente.objects.get_or_create(
                 email=cliente_email,
                 defaults={'nombre_completo': cliente_nombre, 'telefono': cliente_telefono}
@@ -47,26 +55,29 @@ def enroll_cliente_en_taller(taller_id, nombre, email, telefono=None, usuario=No
                     cliente.telefono = cliente_telefono
                     cliente.save(update_fields=['telefono'])
 
-            # Crear inscripción; puede lanzar IntegrityError si ya existe
+            # 4. Verificar si ya está inscrito antes de intentar crear (opcional pero recomendado)
+            if Inscripcion.objects.filter(cliente=cliente, taller=taller_locked).exists():
+                return (None, False, 'Cliente ya inscrito en este taller')
+
+            # 5. Crear inscripción
             inscripcion = Inscripcion.objects.create(
                 cliente=cliente,
-                taller=taller,
+                taller=taller_locked,
                 estado_pago='PENDIENTE'
             )
 
-            # Añadir interés automático si el taller tiene categoría
-            if taller.categoria:
-                cliente.intereses_cliente.add(taller.categoria)
+            # 6. Añadir interés automático si el taller tiene categoría
+            if taller_locked.categoria:
+                cliente.intereses_cliente.add(taller_locked.categoria)
 
-            # Actualizar cupos de forma atómica
-            Taller.objects.select_for_update().filter(id=taller.id).update(
-                cupos_disponibles=F('cupos_disponibles') - 1
-            )
+            # 7. Actualizar cupos (usando el objeto bloqueado)
+            taller_locked.cupos_disponibles -= 1
+            taller_locked.save()
 
         return (inscripcion, True, 'Inscripción creada exitosamente')
 
     except IntegrityError:
-        # Ya inscrito
+        # Ya inscrito (por si acaso falla la verificación previa en condiciones extremas)
         return (None, False, 'Cliente ya inscrito en este taller')
     except Exception as e:
         return (None, False, f'Error inesperado: {e}')

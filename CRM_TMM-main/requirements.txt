@@ -5,3 +5,7 @@ djangorestframework-simplejwt
 python-dotenv
 psycopg2-binary
 gunicorn
+selenium
+webdriver-manager
+locust
+django-cors-headers

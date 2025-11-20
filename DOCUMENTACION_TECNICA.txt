@@ -1,0 +1,156 @@
+================================================================================
+DOCUMENTACIÓN TÉCNICA: CRM TMM (Taller Manualidades y Mindfulness)
+================================================================================
+
+1. INTRODUCCIÓN Y PROPÓSITO
+--------------------------------------------------------------------------------
+El sistema CRM_TMM es una plataforma web desarrollada para la gestión integral de un centro de bienestar y manualidades. Su objetivo principal es centralizar la administración de clientes, talleres, productos e inscripciones, facilitando tanto la operación diaria (B2C) como la gestión de convenios con empresas (B2B).
+
+El sistema permite:
+- Gestionar un catálogo de talleres y productos.
+- Administrar clientes (personas naturales y contactos de empresas).
+- Controlar inscripciones y cupos en tiempo real.
+- Simular y registrar pagos.
+- Generar reportes de ingresos y métricas de gestión.
+- Realizar pruebas de carga para asegurar la estabilidad ante alta demanda.
+
+2. ARQUITECTURA TECNOLÓGICA
+--------------------------------------------------------------------------------
+El proyecto sigue una arquitectura monolítica basada en el patrón MVT (Model-View-Template) de Django, contenerizada para facilitar el despliegue y las pruebas.
+
+- **Lenguaje:** Python 3.11+
+- **Framework Web:** Django 5.x
+- **Base de Datos:** 
+  - Desarrollo Local: SQLite (por defecto en Django).
+  - Producción/Docker: PostgreSQL.
+- **Infraestructura:** Docker y Docker Compose.
+- **Servidor Web:** WSGI (desarrollo) / Gunicorn (producción recomendada).
+- **Testing de Carga:** Locust.
+
+3. ESTRUCTURA DEL PROYECTO
+--------------------------------------------------------------------------------
+La estructura de directorios principal es la siguiente:
+
+CRM_TMM-main/
+├── crm/                        # Aplicación principal Django
+│   ├── management/commands/    # Comandos personalizados (ej. crear usuarios)
+│   ├── migrations/             # Historial de cambios en la BD
+│   ├── templates/              # Plantillas HTML (Frontend)
+│   ├── tests/                  # Pruebas unitarias
+│   ├── utils/                  # Lógica de negocio auxiliar (ej. inscripción)
+│   ├── admin.py                # Configuración del panel administrativo
+│   ├── models.py               # Definición de datos (ORM)
+│   ├── urls.py                 # Rutas de la aplicación
+│   └── views.py                # Controladores de vistas
+├── tmm_project/                # Configuración global del proyecto
+│   ├── settings.py             # Variables de entorno, BD, apps instaladas
+│   └── urls.py                 # Enrutador principal
+├── docker-compose.yml          # Orquestación de servicios (Web, DB, Locust)
+├── dockerfile                  # Definición de la imagen del contenedor Web
+├── locustfile.py               # Script de pruebas de carga
+├── manage.py                   # CLI de Django
+└── requirements.txt            # Dependencias Python
+
+4. MODELO DE DATOS (crm/models.py)
+--------------------------------------------------------------------------------
+El sistema se basa en un modelo relacional robusto:
+
+A. Gestión de Clientes
+- **Empresa (B2B):** Representa instituciones con las que se tienen convenios.
+  - Campos: Razón social, RUT, dirección.
+- **Cliente:** Contacto o usuario final.
+  - Campos: Nombre, email, teléfono, tipo (B2B/B2C).
+  - Relación: Puede estar vinculado a una `Empresa`.
+- **Interes:** Categorías de talleres (ej. Resina, Encuadernación) para segmentación.
+
+B. Gestión de Talleres e Inscripciones
+- **Taller:** Oferta académica.
+  - Campos: Nombre, fecha, cupos totales, cupos disponibles, precio.
+  - Lógica: Controla automáticamente `cupos_disponibles`.
+- **Inscripcion:** Tabla transaccional que vincula Cliente y Taller.
+  - Campos: Estado de pago (Pendiente, Pagado, etc.), monto pagado.
+  - Restricción: `unique_together` para evitar doble inscripción.
+
+C. E-commerce (Productos)
+- **Producto:** Kits o insumos físicos.
+  - Campos: Stock, precio, imagen.
+- **VentaProducto:** Cabecera de una venta.
+- **DetalleVenta:** Detalle de productos en una venta.
+
+D. Auditoría
+- **EmailLog:** Registro de correos enviados por el sistema (éxito/fallo) para trazabilidad.
+
+5. LÓGICA DE NEGOCIO CRÍTICA
+--------------------------------------------------------------------------------
+
+A. Inscripción Segura (`crm/utils/enrollment.py`)
+Esta es la función más crítica del sistema, diseñada para manejar concurrencia alta (ej. lanzamiento de talleres populares).
+
+Función: `enroll_cliente_en_taller`
+- **Atomicidad:** Usa `transaction.atomic()` para asegurar que todas las operaciones de BD se completen o ninguna.
+- **Bloqueo de Fila:** Utiliza `select_for_update()` sobre el registro del `Taller`. Esto bloquea la fila específica en la BD durante la transacción, impidiendo que dos usuarios tomen el último cupo simultáneamente ("Race Condition").
+- **Validaciones:**
+  1. Verifica cupos > 0.
+  2. Verifica si el cliente ya está inscrito.
+  3. Crea/Actualiza el cliente.
+  4. Crea la inscripción.
+  5. Resta el cupo.
+
+B. Vistas Principales (`crm/views.py`)
+- `catalogo_talleres`: Lista talleres activos ordenados por fecha.
+- `detalle_taller_inscripcion`: Maneja el formulario de inscripción. Requiere login (`@login_required`). Llama a la lógica de `enrollment.py`.
+- `pago_simulado`: Vista intermedia que simula una pasarela de pago exitosa.
+
+6. ESTRATEGIA DE PRUEBAS (TESTING)
+--------------------------------------------------------------------------------
+El proyecto cuenta con una pirámide de pruebas completa para asegurar la calidad en diferentes niveles:
+
+A. Pruebas Unitarias y de Integración (`crm/tests/`)
+Utilizan el framework nativo `django.test.TestCase`. Son rápidas y validan la lógica interna y las respuestas HTTP.
+
+- **`test_enrollment.py`:**
+  - Valida la lógica crítica de inscripción.
+  - Verifica que los cupos se descuenten correctamente.
+  - Asegura que no se permitan inscripciones duplicadas (redirige con advertencia).
+  - Comprueba el flujo de redirección hacia la pasarela de pago simulada.
+
+- **`test_web.py`:**
+  - Pruebas de integración para las vistas.
+  - Verifica que todas las URLs públicas y privadas respondan con el código de estado correcto (200 OK, 302 Redirect).
+  - Valida que se rendericen los templates correctos y que el contexto contenga los datos esperados (ej. lista de talleres activos).
+
+B. Pruebas End-to-End (E2E) con Selenium (`crm/utils/`)
+Simulan la interacción real de un usuario en un navegador web (Chrome). Utilizan `StaticLiveServerTestCase` para levantar un servidor de prueba real.
+
+- **Tecnología:** Selenium WebDriver (configurado para correr en modo "headless" en CI/Docker).
+- **`test_e2e_selenium.py`:**
+  - Prueba el flujo completo de inscripción desde la perspectiva del usuario.
+  - Navega al catálogo, hace clic en un taller, llena el formulario y envía los datos.
+  - Verifica que aparezcan los mensajes de éxito en la interfaz.
+- **`test_e2e_flows.py`:**
+  - Valida flujos transversales como el Login de usuarios.
+  - Prueba la funcionalidad de E-commerce (agregar productos al carrito).
+
+C. Pruebas de Carga y Estrés (`locustfile.py`)
+Utiliza **Locust** para simular tráfico masivo y concurrente, vital para eventos de alta demanda (ej. lanzamiento de cupos).
+
+- **Escenario Simulado:**
+  1. **Login:** El usuario se autentica al iniciar.
+  2. **Navegación:** Tráfico de lectura (Home, Catálogos).
+  3. **Inscripción (Crítico):** Tráfico de escritura intensiva (POST).
+- **Validación:** El script es capaz de interpretar tanto redirecciones automáticas (Status 200) como manuales (Status 302) para determinar el éxito de una transacción.
+- **Datos:** Se apoya en `crm/management/commands/create_test_users.py` para generar miles de usuarios de prueba automáticamente.
+
+7. DESPLIEGUE Y EJECUCIÓN
+--------------------------------------------------------------------------------
+El proyecto utiliza Docker Compose para levantar el entorno completo:
+
+- **Servicio `web`:** Contenedor con Django (Puerto 8000).
+- **Servicio `locust`:** Herramienta de pruebas de carga (Interfaz Web en Puerto 8089).
+- **Volúmenes:** Persistencia de código y archivos estáticos.
+
+Comandos Clave:
+- Levantar todo: `docker compose up --build`
+- Crear usuarios test: `docker compose exec web python manage.py create_test_users`
+- Correr tests unitarios: `docker compose exec web python manage.py test crm.tests`
+- Reiniciar Locust: `docker compose restart locust`

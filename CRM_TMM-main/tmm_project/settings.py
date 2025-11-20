@@ -31,7 +31,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'default_insecure_key')
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 # Hosts (comma-separated in env)
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,testserver').split(',')
 # Application definition
 
 INSTALLED_APPS = [
@@ -89,9 +89,20 @@ DATABASES = {
         # IMPORTANTE: El host es el nombre del servicio en docker-compose.yml
         'HOST': os.environ.get('POSTGRES_HOST', 'db'), 
         'PORT': '5432',
+        # Optimización: Mantener conexiones persistentes para evitar overhead en cada request
+        'CONN_MAX_AGE': 600, 
     }
 }
 
+# Optimización para pruebas de carga: Usar un hasher rápido (MD5) en lugar de PBKDF2
+# ADVERTENCIA: No usar MD5PasswordHasher en producción real con datos sensibles.
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.MD5PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

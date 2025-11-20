@@ -149,6 +149,34 @@
             padding: 1em 0;
             font-size: 0.9rem;
         }
+        /* --- NUEVOS ESTILOS: Tarjetas, Badges y Tablas Admin --- */
+        .card-grid {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+            overflow: hidden;
+            transition: transform 0.14s ease, box-shadow 0.14s ease;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,0.09); }
+        .card-img { width:100%; height:160px; object-fit:cover; display:block; }
+        .card-body { padding:12px 14px; }
+        .card-title { margin:0 0 6px 0; font-size:1.05rem; color:#a61e4d; font-weight:700; }
+        .meta { color:#666; font-size:0.9rem; margin-bottom:8px; }
+        .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-weight:700; font-size:0.85rem; }
+        .badge-price { background:#fff0f3; color:#d63384; border:1px solid rgba(214,51,132,0.12); }
+        .badge-cap { background:#f0fff4; color:#138000; border:1px solid rgba(20,120,40,0.08); }
+        .admin-table { width:100%; border-collapse:collapse; }
+        .admin-table th, .admin-table td { padding:10px 8px; border-bottom:1px solid #f3e6ea; }
+        .admin-table th { text-align:left; color:#7a2b49; font-weight:700; }
+        .muted { color:#777; font-size:0.9rem; }
+        .form-inline { display:flex; gap:8px; align-items:center; }
+        .primary-btn { background:#d63384; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+        .secondary-btn { background:#fff; color:#d63384; border:2px solid #ffd9e6; padding:6px 10px; border-radius:8px; cursor:pointer; }
         h2 {
             border-bottom: 2px solid #f3d1d9;
             padding-bottom: 8px;
@@ -223,7 +251,7 @@
                     <button type="submit" class="btn btn-login">Cerrar Sesión</button>
                 </form>
             {% else %}
-                <a href="{% url 'login' %}" class="btn btn-login">Iniciar Sesión</a>
+                <a href="{% url 'login' %}" class="btn btn-login" data-test="login-link">Iniciar Sesión</a>
                 <a href="{% url 'registro_cliente' %}" class="btn btn-register">Registrarse</a>
             {% endif %}
         </div>
@@ -234,6 +262,7 @@
         <span class="admin-title">Gestión Rápida:</span>
         <a href="{% url 'listado_clientes' %}" class="admin-btn">Directorio Clientes</a>
         <a href="{% url 'gestion_deudores' %}" class="admin-btn">Gestión Deudores</a>
+        <a href="{% url 'gestion_talleres' %}" class="admin-btn">Gestión Talleres</a>
         <a href="{% url 'panel_reportes' %}" class="admin-btn">Panel Reportes</a>
     </nav>
     {% endif %}

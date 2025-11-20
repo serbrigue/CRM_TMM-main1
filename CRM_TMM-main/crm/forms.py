@@ -2,6 +2,25 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django import forms 
 from .models import Cliente
+from .models import Taller
+
+
+class TallerForm(forms.ModelForm):
+    """Form para crear/editar un Taller desde la interfaz de administración interna."""
+    class Meta:
+        model = Taller
+        fields = ['nombre', 'descripcion', 'categoria', 'fecha_taller', 'hora_taller', 'modalidad', 'precio', 'cupos_totales', 'esta_activo', 'imagen']
+        widgets = {
+            'fecha_taller': forms.DateInput(attrs={'type': 'date'}),
+            'hora_taller': forms.TimeInput(attrs={'type': 'time'}),
+        }
+
+
+class AdminEmailForm(forms.Form):
+    """Formulario mínimo para enviar correos desde la UI de gestión de talleres."""
+    asunto = forms.CharField(max_length=255, required=True, label='Asunto')
+    mensaje = forms.CharField(widget=forms.Textarea, required=True, label='Mensaje')
+    plantilla = forms.ChoiceField(required=False, choices=[('personalizado','Personalizado'), ('recordatorio','Recordatorio'), ('info_taller', 'Información Taller'), ('cancelacion','Cancelación')], label='Plantilla (opcional)')
 
 class RegistroClienteForm(UserCreationForm):
     """
