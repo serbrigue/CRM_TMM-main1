@@ -1,0 +1,116 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+.eggs/
+*.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+staticfiles_build/
+# If you keep migrations in repo, DO NOT ignore migrations/
+# migrations/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+**/docker-compose.override.yml
+.env
+.env.*
+
+# Editor temp files
+*~
+*.swp
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs
+logs/
+*.log
+
+# Secrets and keys
+*.pem
+
+# Node (if present)
+node_modules/
+
+# Build artifacts
+dist/
+
+# Python virtualenv
+.pyenv/
+
+# Coverage
+coverage/
+
+# celerybeat
+celerybeat-schedule
+
+# IDE / OS files
+*.sublime-workspace
+*.sublime-project
+
+# Local overrides
+local_settings.py
+
+# Optional: ignore migration pyc files
+**/migrations/*.pyc
